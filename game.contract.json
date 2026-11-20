@@ -1,9 +1,11 @@
 {
-  "contract_version": "1.2",
+  "contract_version": "1.3",
   "team": "2A202603672-nguyen-van-vinh",
-  "build_cmd": "npm ci",
-  "run_cmd": "npm start",
+  "build_cmd": "npm ci && npm run build",
+  "run_cmd": "node tools/start.mjs",
   "headless_cmd": "node tools/headless.mjs",
+  "bench_cmd": "node tools/bench.mjs",
+  "soak_cmd": "node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs",
   "tuning": {
     "player_speed": 6,
     "carry_capacity": 10,

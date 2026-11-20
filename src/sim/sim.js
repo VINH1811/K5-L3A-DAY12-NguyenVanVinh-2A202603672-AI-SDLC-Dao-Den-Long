@@ -20,7 +20,9 @@ const DRAIN = Math.round((TUNING.drain_per_s * FUEL_UNIT) / TPS); // 5 đơn v�
 const f1 = (u) => Math.round((u / FUEL_UNIT) * 10) / 10 + 0; // xuất 1 chữ số thập phân
 const DRIFTER_STATES = ['idle', 'chase', 'flee'];
 
-export function createSim({ seed = 1, night = 1, scenario = null } = {}) {
+// bench = true: cảnh benchmark Ticket-04 (tắt sinh thêm, sát thương, nhặt, hao dầu, kết thúc Đêm).
+// Mặc định false; headless theo contract không bao giờ bật.
+export function createSim({ seed = 1, night = 1, scenario = null, bench = false } = {}) {
   const map = NIGHTS[night];
   if (!map) throw new ScenarioError(`night ${night} không tồn tại (chỉ có 1, 2, 3)`);
   const rng = makeRng(seed);
@@ -28,6 +30,7 @@ export function createSim({ seed = 1, night = 1, scenario = null } = {}) {
 
   const s = {
     night,
+    bench,
     map,
     tick: 0, // số tick đã chạy (kể cả lúc tạm dừng)
     sim: 0, // số bước gameplay đã chạy (sim_tick)
@@ -237,7 +240,7 @@ export function createSim({ seed = 1, night = 1, scenario = null } = {}) {
     updateWind();
     // 2b. dầu: đèn sáng tự hao 1/s, mỗi Bóng Mực đang hút trừ thêm 5/s; hết dầu thì tắt ngay sau bước 2
     for (const l of s.lanterns) {
-      if (!l.lit) continue;
+      if (!l.lit || bench) continue;
       const drainers = s.shades.filter((sh) => sh.state === 'drain' && sh.target === l.id).sort(byId);
       l.fuel = Math.max(0, l.fuel - DECAY - DRAIN * drainers.length);
       for (const sh of drainers) {
@@ -254,7 +257,7 @@ export function createSim({ seed = 1, night = 1, scenario = null } = {}) {
 
     const active = !P.dead && P.respawn === 0;
     // 4. nhặt đom đóm và bùa
-    if (active) {
+    if (active && !bench) {
       for (const m of [...s.motes].sort(byId)) {
         if (P.carried >= capacity()) break;
         if (m.born >= s.sim) continue; // thực thể mới chỉ tương tác được từ tick sau
@@ -380,7 +383,7 @@ export function createSim({ seed = 1, night = 1, scenario = null } = {}) {
         }
       }
     }
-    if (active && P.invuln === 0) {
+    if (active && P.invuln === 0 && !bench) {
       for (const sh of [...s.shades].sort(byId)) {
         if ((sh.state !== 'wander' && sh.state !== 'chase') || sh.safeTicks > 0) continue;
         if (distXZ(P.pos, sh.pos) <= TUNING.shade_hit_radius && Math.abs(P.pos[1] - sh.pos[1]) <= C.shade_hit_dy) {
@@ -407,6 +410,7 @@ export function createSim({ seed = 1, night = 1, scenario = null } = {}) {
     }
 
     // 10. sinh thực thể theo lịch
+    if (bench) return; // cảnh bench: không sinh thêm, không kết thúc Đêm
     if (s.randomMotes && s.sim % C.mote_spawn_every === 0 && s.motes.length < C.mote_cap) {
       const empty = map.moteSpots.filter((p) => !s.motes.some((m) => distXZ(m.pos, p) < 0.5));
       if (empty.length) addMote(empty[rng.int(empty.length)]);

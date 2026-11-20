@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Chế độ headless theo Test Contract v1.2.
+// Chế độ headless theo Test Contract v1.3.
 // node tools/headless.mjs --seed <int> --night 1|2|3 [--scenario f.json] [--inputs f.json] --ticks <int> --out f.jsonl [--snapshot-every 10]
 import fs from 'node:fs';
 import { createSim, ScenarioError } from '../src/sim/sim.js';
