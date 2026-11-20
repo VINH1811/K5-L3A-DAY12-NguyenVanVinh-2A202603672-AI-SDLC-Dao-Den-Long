@@ -2,30 +2,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { TUNING } from '../src/sim/config.js';
 
-const ROOT = path.resolve(import.meta.dirname, '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ddl-'));
-let n = 0;
+import { run, ROOT } from "./run.mjs";
 
-function run({ seed = 1, ticks = 600, scenario, inputs, every = 10, raw = {} } = {}) {
-  const id = n++;
-  const out = path.join(tmp, `o${id}.jsonl`);
-  const args = ['tools/headless.mjs', '--seed', String(seed), '--night', '1', '--ticks', String(ticks), '--out', out, '--snapshot-every', String(every)];
-  if (scenario !== undefined) { const f = path.join(tmp, `s${id}.json`); fs.writeFileSync(f, typeof scenario === 'string' ? scenario : JSON.stringify(scenario)); args.push('--scenario', f); }
-  if (inputs !== undefined) { const f = path.join(tmp, `i${id}.json`); fs.writeFileSync(f, typeof inputs === 'string' ? inputs : JSON.stringify(inputs)); args.push('--inputs', f); }
-  const r = spawnSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8' });
-  const lines = r.status === 0 ? fs.readFileSync(out, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
-  return { code: r.status, stderr: r.stderr, lines, events: lines.filter((l) => l.type === 'event'), snaps: lines.filter((l) => l.type === 'snapshot'), end: lines.at(-1), raw: r.status === 0 ? fs.readFileSync(out, 'utf8') : '' };
-}
 const quiet = { random_motes: false, random_shades: false };
 
 test('contract khớp với tuning trong code', () => {
   const c = JSON.parse(fs.readFileSync(path.join(ROOT, 'game.contract.json'), 'utf8'));
-  assert.equal(c.contract_version, '1.0');
+  // v1.1 (Ticket-02): đổi phiên bản, thêm khóa dash_* và night2/3_duration_s
+  assert.equal(c.contract_version, '1.1');
+  assert.deepEqual(Object.keys(c.tuning).sort(), Object.keys(TUNING).sort());
   for (const [k, v] of Object.entries(c.tuning)) assert.deepEqual(v, TUNING[k], `tuning.${k}`);
 });
 
@@ -152,7 +140,7 @@ test('Bóng Mực không vào vùng an toàn quanh đèn sáng', () => {
 test('rơi khỏi đảo: player_hit by fall, hồi sinh ở gốc', () => {
   const r = run({ scenario: { ...quiet, motes: [], shades: [], player: { pos: [39, 0, 0], carried: 4 } }, ticks: 200, inputs: { frames: [{ tick: 0, move: [1, 0] }, { tick: 20, move: [0, 0] }] } });
   const h = r.events.find((e) => e.name === 'player_hit');
-  assert.deepEqual(h.data, { by: 'fall', flames: 2, dropped: 4 });
+  assert.deepEqual(h.data, { by: 'fall', flames: 2, dropped: 4, lost: 4 });
   assert.deepEqual(r.snaps.at(-1).player.pos, [0, 0, 0]);
 });
 
