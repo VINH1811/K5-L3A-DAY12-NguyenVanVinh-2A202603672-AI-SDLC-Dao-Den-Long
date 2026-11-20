@@ -12,7 +12,7 @@ const quiet = { random_motes: false, random_shades: false };
 test('contract khớp với tuning trong code', () => {
   const c = JSON.parse(fs.readFileSync(path.join(ROOT, 'game.contract.json'), 'utf8'));
   // v1.2 (Ticket-03): thêm khóa dầu đèn / win_ratio / capacity_max, thời lượng Đêm 240/270/300
-  assert.equal(c.contract_version, '1.2');
+  assert.equal(c.contract_version, '1.3'); // v1.3 (Ticket-04): thêm bench_cmd, soak_cmd; tuning giữ như v1.2
   assert.deepEqual(Object.keys(c.tuning).sort(), Object.keys(TUNING).sort());
   for (const [k, v] of Object.entries(c.tuning)) assert.deepEqual(v, TUNING[k], `tuning.${k}`);
 });
