@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 out/
+.data/
+bench.json
+soak.json
