@@ -12,9 +12,9 @@ export const TUNING = {
   interact_radius: 2.0,
   pulse_cost: 3,
   pulse_radius: 5.0,
-  night1_duration_s: 300,
-  night2_duration_s: 330,
-  night3_duration_s: 360,
+  night1_duration_s: 240, // Ticket-03: 300 → 240
+  night2_duration_s: 270, // 330 → 270
+  night3_duration_s: 300, // 360 → 300
   flames: 3,
   invuln_s: 1.5,
   hit_drop_ratio: 0.5,
@@ -28,14 +28,29 @@ export const TUNING = {
   dash_speed: 14.0,
   dash_duration_s: 0.2,
   dash_cooldown_s: 1.5,
+  // Ticket-03 (Contract v1.2): dầu đèn, thắp lại, Bóng Mực hút dầu, luật thắng mới, sức chứa tăng dần
+  fuel_max: 100,
+  fuel_decay_per_s: 1.0,
+  fuel_per_mote: 10,
+  relight_cost: 5,
+  win_ratio: 0.6,
+  drain_per_s: 5,
+  low_fuel_threshold: 30,
+  capacity_max: 20,
   score: {
-    per_mote: 10,
-    per_lantern: 100,
+    per_mote: 5, // Ticket-03: 10 → 5 (thắp mới, thắp lại hoặc châm dầu)
+    per_lantern: 100, // thắp lần đầu
+    per_relight: 40,
     per_stun: 5,
-    per_second_left: 2,
+    per_stun_drain: 15, // trúng Tỏa Sáng khi đang hút dầu
+    per_second_left: 0, // Ticket-03: bỏ thưởng thời gian
     per_flame_left: 50,
+    per_lit_at_dawn: 50, // + floor(fuel) cho mỗi đèn đang sáng lúc bình minh
   },
 };
+
+// Dầu tính bằng đơn vị nguyên 1/60 để không sai số số thực (1 tick hao đúng 1 đơn vị).
+export const FUEL_UNIT = 60;
 
 // Hằng số phụ (không có trong contract nhưng ghi rõ trong docs/notes).
 export const C = {
@@ -95,6 +110,11 @@ export const C = {
   wind_speed: 2.0,
   // bục nhảy
   pad_radius: 1.0,
+  // Bóng Mực hút dầu
+  drain_reach: 2.0, // tới gần đèn yếu ≤ 2 m thì chuyển drain
+  drain_break: 6.0, // Mây vào trong 6 m thì bỏ hút, đuổi
+  drain_event_every: 60,
+  capacity_per_light: 2,
 };
 
 const deg = (d) => (d * Math.PI) / 180;
