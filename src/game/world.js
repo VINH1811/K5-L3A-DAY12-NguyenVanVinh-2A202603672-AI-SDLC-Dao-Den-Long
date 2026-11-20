@@ -282,7 +282,9 @@ export function buildWorld(scene, renderer) {
     if (island) island.update(t, progress, day);
   }
 
-  return { update, setNight, uniforms, get day() { return day; }, setDayNow(v) { day = v; } };
+  // Cảnh benchmark tắt phần trang trí sáng tạo thêm (đảo bay, đèn trời) để mọi bài đo trên cùng cảnh chuẩn.
+  function setCreative(on) { skyIslands.group.visible = on; skyLanterns.visible = on; }
+  return { update, setNight, setCreative, uniforms, get day() { return day; }, setDayNow(v) { day = v; } };
 }
 
 // ======================================================================

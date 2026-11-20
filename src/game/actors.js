@@ -1,5 +1,6 @@
 // Mô hình nhân vật & thực thể: Mây, Đèn Lồng Lớn, Bóng Mực, đom đóm, hiệu ứng.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PAL, softTexture } from './world.js';
 import { TUNING, FUEL_UNIT } from '../sim/config.js';
 
@@ -388,6 +389,7 @@ const shadeRimMat = (stunColor) => new THREE.ShaderMaterial({
   transparent: true,
   vertexShader: `uniform float uTime; varying vec3 vN; varying vec3 vV; varying float vY;
     void main(){ vec3 p = position; float w = sin(p.y*6.0 + uTime*5.0)*0.04 + sin(p.x*7.0 - uTime*4.0)*0.03; p += normal*w;
+      float tl = max(0.0, -p.y - 0.35); float ang = atan(p.z, p.x); p.x += sin(uTime*4.0 + ang*3.0)*tl*0.3; p.z += cos(uTime*3.4 + ang*3.0)*tl*0.3;
       vec4 mv = modelViewMatrix*vec4(p,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); vY = position.y; gl_Position = projectionMatrix*mv; }`,
   fragmentShader: `uniform vec3 uRim; uniform vec3 uBody; uniform float uStun; uniform vec3 uStunCol; uniform float uFade; varying vec3 vN; varying vec3 vV; varying float vY;
     void main(){ float f = pow(1.0 - max(dot(vN, vV),0.0), 2.2);
@@ -399,48 +401,79 @@ const shadeRimMat = (stunColor) => new THREE.ShaderMaterial({
     }`,
 });
 
+// Hình dạng dùng chung cho mọi Bóng Mực (thân + 6 xúc tu gộp một mesh, 2 mắt gộp một mesh)
+// để 200 con trong cảnh benchmark chỉ tốn khoảng 3 draw call mỗi con.
+let SHADE_GEO = null;
+function shadeGeometry() {
+  if (SHADE_GEO) return SHADE_GEO;
+  const parts = [];
+  const blob = new THREE.SphereGeometry(0.7, 24, 16);
+  blob.scale(1, 1.15, 1);
+  parts.push(blob);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const c = new THREE.ConeGeometry(0.22, 1.1, 8);
+    c.rotateX(Math.PI);
+    c.translate(Math.cos(a) * 0.42, -0.75, Math.sin(a) * 0.42);
+    parts.push(c);
+  }
+  const body = mergeGeometries(parts.map((p) => p.toNonIndexed()));
+  const eyes = mergeGeometries([-0.22, 0.22].map((sx) => { const e = new THREE.SphereGeometry(0.11, 10, 6); e.scale(1, 1, 0.5); e.translate(sx, 0, 0.6); return e.toNonIndexed(); }));
+  SHADE_GEO = { body, eyes };
+  return SHADE_GEO;
+}
+
+// Khói mực của mọi Bóng Mực: một hệ hạt duy nhất (1 draw call).
+const SMOKE_PER = 4, SMOKE_MAX = 512;
+let SMOKE = null;
+function smokeSystem(scene) {
+  if (SMOKE && SMOKE.scene === scene) return SMOKE;
+  const n = SMOKE_PER * SMOKE_MAX;
+  const pos = new Float32Array(n * 3), size = new Float32Array(n), alpha = new Float32Array(n);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  g.setAttribute('aAlpha', new THREE.BufferAttribute(alpha, 1));
+  const pts = new THREE.Points(g, new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    vertexShader: `attribute float aSize; attribute float aAlpha; varying float vA;
+      void main(){ vA = aAlpha; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = aSize * 300.0 / -mv.z; gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `varying float vA; void main(){ float d = length(gl_PointCoord-0.5)*2.0; float a = smoothstep(1.0,0.0,d); a *= a * vA;
+      gl_FragColor = vec4(vec3(0.165,0.059,0.27), a); }`,
+  }));
+  pts.frustumCulled = false;
+  scene.add(pts);
+  const free = Array.from({ length: SMOKE_MAX }, (_, i) => SMOKE_MAX - 1 - i);
+  SMOKE = { scene, pos, size, alpha, g, free, dirty: false };
+  return SMOKE;
+}
+export function flushShadeSmoke() {
+  if (!SMOKE || !SMOKE.dirty) return;
+  for (const k of ['position', 'aSize', 'aAlpha']) SMOKE.g.attributes[k].needsUpdate = true;
+  SMOKE.dirty = false;
+}
+
 export function makeShade(scene) {
+  const geo = shadeGeometry();
+  const smoke = smokeSystem(scene);
+  const slot = smoke.free.pop() ?? -1;
   const g = new THREE.Group();
   const mat = shadeRimMat(PAL.shadeStun);
-  const blob = new THREE.Mesh(new THREE.SphereGeometry(0.7, 28, 20), mat);
-  blob.scale.set(1, 1.15, 1);
-  g.add(blob);
-  const tendrils = [];
-  for (let i = 0; i < 6; i++) {
-    const tdl = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.1, 10), mat);
-    const a = (i / 6) * Math.PI * 2;
-    tdl.position.set(Math.cos(a) * 0.42, -0.75, Math.sin(a) * 0.42);
-    tdl.rotation.x = Math.PI;
-    tdl.userData.a = a;
-    g.add(tdl);
-    tendrils.push(tdl);
-  }
+  const body = new THREE.Mesh(geo.body, mat);
+  g.add(body);
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0xe6d6ff });
-  const eyes = [];
-  for (const sx of [-0.22, 0.22]) {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), eyeMat);
-    e.scale.set(1, 0.6, 0.5);
-    e.position.set(sx, 0.18, 0.6);
-    g.add(e);
-    eyes.push(e);
-  }
+  const eyes = new THREE.Mesh(geo.eyes, eyeMat);
+  eyes.position.y = 0.18;
+  g.add(eyes);
   const eyeGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: PAL.shadeRim, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
   eyeGlow.scale.set(1.6, 0.8, 1);
   eyeGlow.position.set(0, 0.18, 0.65);
   g.add(eyeGlow);
-  // khói mực tỏa ra
-  const smoke = [];
-  const smokeTex = softTexture('rgba(255,255,255,1)');
-  for (let i = 0; i < 6; i++) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, color: 0x2a0f45, transparent: true, opacity: 0.4, depthWrite: false }));
-    s.userData.ph = i / 6;
-    scene.add(s);
-    smoke.push(s);
-  }
   const stars = [];
   for (let i = 0; i < 4; i++) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xfff1b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const s = new THREE.Sprite(starMat());
     s.scale.setScalar(0.25);
+    s.visible = false;
     g.add(s);
     stars.push(s);
   }
@@ -448,10 +481,12 @@ export function makeShade(scene) {
   let stun = 0, born = 0, yaw = 0;
   const last = new THREE.Vector3();
   const vis = new THREE.Vector3();
+  const target = new THREE.Vector3();
   let first = true;
+  const ph = Math.random() * 10;
 
   function update(dt, t, sh, playerPos) {
-    const target = new THREE.Vector3(sh.pos[0], sh.pos[1], sh.pos[2]);
+    target.set(sh.pos[0], sh.pos[1], sh.pos[2]);
     if (first) { vis.copy(target); last.copy(target); first = false; }
     vis.lerp(target, Math.min(1, dt * 20));
     const isStun = sh.state === 'stunned';
@@ -460,43 +495,54 @@ export function makeShade(scene) {
     mat.uniforms.uStun.value = stun;
     mat.uniforms.uRim.value.copy(ACCESS.colorblind ? RIM_CB : RIM_NORMAL);
     eyeGlow.material.color.copy(ACCESS.colorblind ? RIM_CB : RIM_NORMAL);
-    mat.uniforms.uTime.value = t;
+    mat.uniforms.uTime.value = t + ph;
     mat.uniforms.uFade.value = born;
-    const hover = Math.sin(t * 2.4 + sh.id.length + vis.x) * 0.15;
+    const hover = Math.sin(t * 2.4 + ph + vis.x) * 0.15;
     g.position.set(vis.x, vis.y - 0.15 + hover - (1 - born) * 1.2, vis.z);
     // nhìn về Mây khi đuổi
     const mvx = vis.x - last.x, mvz = vis.z - last.z;
     let ty = yaw;
     if (sh.state === 'chase' || sh.state === 'wander') ty = sh.state === 'chase' ? Math.atan2(playerPos.x - vis.x, playerPos.z - vis.z) : (Math.hypot(mvx, mvz) > 1e-4 ? Math.atan2(mvx, mvz) : yaw);
-    let d = Math.atan2(Math.sin(ty - yaw), Math.cos(ty - yaw));
+    const d = Math.atan2(Math.sin(ty - yaw), Math.cos(ty - yaw));
     yaw += d * Math.min(1, dt * 6);
     g.rotation.y = yaw + (isStun ? t * 6 : 0);
     last.copy(vis);
     const chase = sh.state === 'chase' ? 1 : 0;
     const drain = sh.state === 'drain' ? 1 : 0; // đang hút dầu: phồng xẹp nhanh như đang hút
-    g.scale.setScalar(born * (1 + chase * 0.08 + Math.sin(t * 6) * 0.03 * chase + drain * (0.1 + Math.sin(t * 9) * 0.08)));
-    tendrils.forEach((td, i) => { td.rotation.z = Math.sin(t * 4 + i) * 0.35; td.rotation.x = Math.PI + Math.cos(t * 3.4 + i) * 0.25; });
+    g.scale.setScalar(Math.max(0.001, born * (1 + chase * 0.08 + Math.sin(t * 6) * 0.03 * chase + drain * (0.1 + Math.sin(t * 9) * 0.08))));
     eyeMat.color.setHex(isStun ? 0x7a7590 : ACCESS.colorblind ? 0x00b3ff : 0xe6d6ff);
-    eyes.forEach((e) => { e.scale.y = isStun ? 0.15 : 0.6; });
+    eyes.scale.y = isStun ? 0.25 : 1;
     eyeGlow.material.opacity = (isStun ? 0.1 : 0.55 + chase * 0.4) * born;
     stars.forEach((s, i) => {
       s.visible = stun > 0.3;
       const a = t * 4 + (i / 4) * Math.PI * 2;
       s.position.set(Math.cos(a) * 0.6, 1.15, Math.sin(a) * 0.6);
     });
-    smoke.forEach((s) => {
-      const k = (t * 0.6 + s.userData.ph) % 1;
-      s.position.set(vis.x + Math.sin(s.userData.ph * 40) * 0.5, vis.y - 0.9 + k * 1.8, vis.z + Math.cos(s.userData.ph * 40) * 0.5);
-      s.scale.setScalar(0.8 + k * 2.2);
-      s.material.opacity = (1 - k) * 0.45 * born * (1 - stun * 0.6);
-    });
+    if (slot >= 0) {
+      for (let i = 0; i < SMOKE_PER; i++) {
+        const p = i / SMOKE_PER, k = (t * 0.6 + p + ph) % 1, j = slot * SMOKE_PER + i;
+        smoke.pos[j * 3] = vis.x + Math.sin(p * 40 + ph) * 0.5;
+        smoke.pos[j * 3 + 1] = vis.y - 0.9 + k * 1.8;
+        smoke.pos[j * 3 + 2] = vis.z + Math.cos(p * 40 + ph) * 0.5;
+        smoke.size[j] = 0.8 + k * 2.2;
+        smoke.alpha[j] = (1 - k) * 0.45 * born * (1 - stun * 0.6);
+      }
+      smoke.dirty = true;
+    }
   }
   function dispose() {
     scene.remove(g);
-    smoke.forEach((s) => scene.remove(s));
+    mat.dispose(); eyeMat.dispose(); eyeGlow.material.dispose();
+    if (slot >= 0) {
+      for (let i = 0; i < SMOKE_PER; i++) smoke.alpha[slot * SMOKE_PER + i] = 0;
+      smoke.dirty = true;
+      smoke.free.push(slot);
+    }
   }
   return { update, dispose };
 }
+let STAR_MAT = null;
+const starMat = () => (STAR_MAT ??= new THREE.SpriteMaterial({ map: glowTex(), color: 0xfff1b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
 
 // ======================= ĐOM ĐÓM =======================
 export function makeMotes(scene, max = 64) {
