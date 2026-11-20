@@ -1,9 +1,9 @@
 // Phím điều khiển có thể đổi (Ticket-04): mặc định, tên hiển thị, phát hiện trùng phím.
 export const ACTIONS = [
   ['up', 'Đi tới'], ['down', 'Đi lùi'], ['left', 'Sang trái'], ['right', 'Sang phải'],
-  ['jump', 'Nhảy'], ['dash', 'Lướt'], ['interact', 'Nạp / châm dầu'], ['pulse', 'Tỏa Sáng'], ['pause', 'Tạm dừng'],
+  ['jump', 'Nhảy'], ['dash', 'Lướt'], ['interact', 'Nạp / châm dầu'], ['pulse', 'Tỏa Sáng'], ['ability', 'Năng lực thẻ (Cốt truyện)'], ['pause', 'Tạm dừng'],
 ];
-export const DEFAULT_KEYS = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', dash: 'ShiftLeft', interact: 'KeyE', pulse: 'KeyF', pause: 'Escape' };
+export const DEFAULT_KEYS = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', dash: 'ShiftLeft', interact: 'KeyE', pulse: 'KeyF', ability: 'KeyQ', pause: 'Escape' };
 // Phím phụ cố định (chỉ dùng khi không bị gán cho hành động khác)
 export const ALT_KEYS = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', dash: 'ShiftRight', pause: 'KeyP' };
 

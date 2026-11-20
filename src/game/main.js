@@ -14,6 +14,8 @@ import { ACTIONS, DEFAULT_KEYS, keyName, loadKeys, duplicates, codesFor } from '
 import { loadBoard, saveScore } from './scores.js';
 import { validName, isoWithOffset } from '../leaderboard.js';
 import { benchScenario, benchCamera, BENCH } from '../sim/bench.js';
+import { CHAPTERS, CARDS, CARD_IDS, MONSTERS } from '../sim/story.js';
+import { PROLOGUE, CHAPTER_TEXT, ENDING, MONSTER_ICON } from './storytext.js';
 
 const LOW_U = TUNING.low_fuel_threshold * FUEL_UNIT, MAX_U = TUNING.fuel_max * FUEL_UNIT;
 const litNeeded = (n) => Math.ceil(TUNING.win_ratio * n);
@@ -89,7 +91,7 @@ function buildNightViews(n) {
   player.setGround((x, z) => groundAt(map, x, z));
 }
 
-function newSim(n, backdrop = false) {
+function newSim(n, backdrop = false, story = null) {
   for (const v of shadeViews.values()) v.dispose();
   shadeViews.clear();
   for (const v of drifterViews.values()) v.dispose();
@@ -99,7 +101,7 @@ function newSim(n, backdrop = false) {
   const seed = backdrop ? 7 : (Date.now() & 0x7fffffff);
   if (!backdrop && !run.seed) run.seed = seed;
   sim = createSim({
-    seed, night: n,
+    seed, night: n, story,
     scenario: backdrop ? { lanterns: [{ id: 'L1', lit: true }, { id: 'L2', lit: true }, { id: 'L5', lit: true }], shades: [{ id: 'S1', pos: [-18, 1, 26] }, { id: 'S2', pos: [28, 1, -12] }] } : null,
   });
   sim.drainEvents();
@@ -107,13 +109,14 @@ function newSim(n, backdrop = false) {
   stats = { motes: 0, lit: 0, relit: 0, stuns: 0 };
   lastLaunch = 0; windWarned = false;
   lowWarned = new Set(); drainWarned = new Set();
-  $('nightName').textContent = `Đêm ${n} · ${NIGHTS[n].name}`;
+  $('nightName').textContent = story ? `Chương ${n} · ${NIGHTS[n].name}` : `Đêm ${n} · ${NIGHTS[n].name}`;
+  renderCardStrip();
 }
 
 // ---------- điều khiển
 const keys = new Set();
 const tapped = new Set();
-const btn = { jump: false, interact: false, pulse: false, dash: false };
+const btn = { jump: false, interact: false, pulse: false, dash: false, ability: false };
 let mouseRight = false;
 let camYaw = 0, camPitch = 0.5, camDist = 9.5;
 let KEYS = loadKeys(store.get('keys', null));
@@ -163,6 +166,7 @@ function readInput() {
   btn.interact = k('interact');
   btn.pulse = k('pulse') || mouseRight;
   btn.dash = k('dash');
+  btn.ability = k('ability');
   tapped.clear();
   return { move: [x, z], cam_yaw_deg: (camYaw * 180) / Math.PI, ...btn };
 }
@@ -207,11 +211,11 @@ function interactHint() {
 // ---------- chế độ màn hình
 let mode = 'loading';
 let introT = 0, resultT = 0;
-const SCREENS = ['title', 'intro', 'pause', 'result', 'dawn', 'settings', 'board'];
+const SCREENS = ['title', 'intro', 'pause', 'result', 'dawn', 'settings', 'board', 'chapters', 'cardpick'];
 let settingsFrom = 'title';
 function setMode(m) {
   mode = m;
-  const show = { title: 'title', intro: 'intro', paused: 'pause', result: 'result', dawn: 'dawn', settings: 'settings', board: 'board' }[m];
+  const show = { title: 'title', intro: 'intro', paused: 'pause', result: 'result', dawn: 'dawn', settings: 'settings', board: 'board', chapters: 'chapters', cardpick: 'cardpick' }[m];
   for (const id of SCREENS) $(id).classList.toggle('hidden', id !== show);
   $('hud').classList.toggle('hidden', !['play', 'paused', 'intro', 'ending', 'settings'].includes(m) || (m === 'settings' && settingsFrom === 'title'));
   if (!['play', 'intro', 'ending'].includes(m)) { if (document.pointerLockElement) document.exitPointerLock(); keys.clear(); mouseRight = false; }
@@ -219,6 +223,8 @@ function setMode(m) {
 }
 function startNight(n) {
   audio.unlock();
+  storyRun = null;
+  $('introLead').classList.add('hidden'); $('introTip').classList.add('hidden');
   newSim(n, false);
   world.setDayNow(0);
   camYaw = 0; camPitch = 0.5;
@@ -233,14 +239,105 @@ function startRun(n) { run = { total: 0, nights: [], seed: 0, saved: false }; st
 $('btnStart').onclick = () => startRun(1);
 document.querySelectorAll('[data-night]').forEach((b) => { b.onclick = () => startRun(+b.dataset.night); });
 $('btnResume').onclick = () => setMode('play');
-$('btnRestart').onclick = () => startNight(night);
+$('btnRestart').onclick = () => (storyRun ? startChapter(storyRun.chapter) : startNight(night));
 $('btnAgain').onclick = () => {
+  if (storyRun) { startChapter(storyRun.chapter); return; } // Cốt truyện: thua thì chơi lại chương
   if (sim.s.state === 'won' && night < 3) startNight(night + 1);
   else startNight(night);
 };
-const toMenu = () => { newSim(1, true); setMode('title'); };
+const toMenu = () => { storyRun = null; newSim(1, true); setMode('title'); };
+
+// ---------- Chế độ Cốt truyện: 5 chương mở khóa lần lượt, thẻ năng lực giữ qua các chương
+let storyRun = null;
+const STORY_DEFAULT = { unlocked: 1, done: [], cards: [], total: 0, scores: {} };
+let storyProg = { ...STORY_DEFAULT, ...store.get('story', {}) };
+const saveStory = () => store.set('story', storyProg);
+function renderChapters() {
+  $('prologue').textContent = PROLOGUE;
+  $('chapterList').innerHTML = [1, 2, 3, 4, 5].map((n) => {
+    const ch = CHAPTERS[n], locked = n > storyProg.unlocked, done = storyProg.done.includes(n);
+    const mon = Object.keys(ch.monsters).concat(ch.boss ? ['boss'] : []).map((k) => `<span title="${MONSTERS[k].name}">${MONSTER_ICON[k]}</span>`).join(' ');
+    return `<button class="chap${done ? ' done' : ''}" data-ch="${n}" ${locked ? 'disabled' : ''}><b>Chương ${n}</b><span class="isl">${NIGHTS[n].name}</span><span>${ch.title}</span><span class="mon">${locked ? '🔒 Chưa mở' : mon}</span></button>`;
+  }).join('');
+  $('chapterList').querySelectorAll('[data-ch]').forEach((b) => { b.onclick = () => startChapter(+b.dataset.ch); });
+  $('ownedCards').innerHTML = storyProg.cards.length ? 'Thẻ đang có: ' + storyProg.cards.map((id) => `<span>${CARDS[id].icon} ${CARDS[id].name}</span>`).join('') : 'Chưa có thẻ năng lực. Thắng một chương để nhận thẻ.';
+}
+function startChapter(n) {
+  audio.unlock();
+  storyRun = { chapter: n };
+  newSim(n, false, { cards: storyProg.cards });
+  world.setDayNow(0);
+  camYaw = 0; camPitch = 0.5; lockedOnce = false; introT = -2.5; // lời dẫn dài hơn: giữ màn giới thiệu lâu hơn
+  const tx = CHAPTER_TEXT[n];
+  $('introEyebrow').textContent = `Chương ${n} · ${CHAPTERS[n].title}`;
+  $('introTitle').textContent = NIGHTS[n].name;
+  $('introLead').textContent = tx.lead; $('introLead').classList.remove('hidden');
+  $('introQuote').textContent = tx.quote;
+  $('introTip').textContent = tx.tip; $('introTip').classList.remove('hidden');
+  setMode('intro');
+}
+function renderCardStrip() {
+  const cards = sim?.s.story?.cards ?? [];
+  $('cardStrip').classList.toggle('hidden', cards.length === 0);
+  const act = sim?.s.story?.mods.active;
+  $('cardStrip').innerHTML = cards.map((id) => `<span class="${id === act ? 'act' : ''}" title="${CARDS[id].text}">${CARDS[id].icon} ${CARDS[id].name}</span>`).join('');
+  $('cdAbility').classList.toggle('hidden', !act);
+  // tên thẻ đầy đủ đã hiện ở dải thẻ; nhãn dưới ô Q giữ ngắn để không đè nhãn bên cạnh
+}
+function showCardPick(done) {
+  const pool = CARD_IDS.filter((id) => !storyProg.cards.includes(id));
+  const opts = [];
+  while (opts.length < 3 && pool.length) opts.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  $('pickEyebrow').textContent = `Chương ${done} hoàn thành`;
+  $('pickKey').textContent = keyName(KEYS.ability);
+  $('cardOptions').innerHTML = opts.map((id) => { const c = CARDS[id]; return `<button class="pcard" data-card="${id}"><span class="ic">${c.icon}</span><b>${c.name}</b><span class="kd">${c.kind === 'active' ? 'Chủ động · ' + keyName(KEYS.ability) : 'Thụ động'}</span><small>${c.text}</small></button>`; }).join('');
+  $('cardOptions').querySelectorAll('[data-card]').forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.card;
+      // chỉ giữ một thẻ chủ động: thẻ chủ động mới thay thẻ cũ
+      if (CARDS[id].kind === 'active') storyProg.cards = storyProg.cards.filter((c) => CARDS[c].kind !== 'active');
+      storyProg.cards.push(id);
+      saveStory();
+      startChapter(done + 1);
+    };
+  });
+  setMode('cardpick');
+}
+function storyResult() {
+  const s = sim.s, won = s.state === 'won', n = storyRun.chapter;
+  if (won) {
+    if (!storyProg.done.includes(n)) storyProg.done.push(n);
+    storyProg.unlocked = Math.max(storyProg.unlocked, Math.min(5, n + 1));
+    storyProg.scores[n] = Math.max(storyProg.scores[n] ?? 0, s.score);
+    storyProg.total = Object.values(storyProg.scores).reduce((a, b) => a + b, 0);
+    saveStory();
+    if (n === 5) {
+      $('dawnTitle').textContent = 'Năm hòn đảo đã sáng';
+      $('dawnText').textContent = ENDING;
+      $('dawnScore').textContent = storyProg.total;
+      $('dawnGrid').innerHTML = [1, 2, 3, 4, 5].map((k) => `<span>Chương ${k} · ${NIGHTS[k].name}</span><b>${storyProg.scores[k] ?? '—'}</b>`).join('');
+      $('saveForm').classList.add('hidden');
+      setMode('dawn');
+      return;
+    }
+    showCardPick(n);
+    return;
+  }
+  $('result').querySelector('.panel').classList.add('lost');
+  $('resEyebrow').textContent = `Chương ${n} · ${CHAPTERS[n].title}`;
+  $('resTitle').textContent = s.player.flames <= 0 ? 'Ngọn lửa đã tắt' : 'Trời sáng mà đèn chưa đủ';
+  $('resText').textContent = 'Thẻ năng lực vẫn còn đó. Thử lại chương này nhé, Mây.';
+  $('resScore').textContent = s.score;
+  $('resGrid').innerHTML = '';
+  $('btnAgain').textContent = 'Chơi lại chương';
+  $('saveForm').classList.add('hidden');
+  setMode('result');
+}
+$('btnStory').onclick = () => { renderChapters(); setMode('chapters'); };
+$('btnChaptersBack').onclick = () => setMode('title');
+$('btnStoryReset').onclick = () => { storyProg = { ...STORY_DEFAULT, done: [], cards: [], scores: {} }; saveStory(); renderChapters(); };
 $('btnMenu').onclick = $('btnMenu2').onclick = $('btnMenu3').onclick = toMenu;
-$('btnDawnAgain').onclick = () => startRun(1);
+$('btnDawnAgain').onclick = () => (storyRun ? (renderChapters(), setMode('chapters')) : startRun(1));
 $('btnSettings').onclick = () => { settingsFrom = 'title'; setMode('settings'); renderKeys(); };
 $('btnPauseSettings').onclick = () => { settingsFrom = 'paused'; setMode('settings'); renderKeys(); };
 $('btnSettingsBack').onclick = () => { capture = null; setMode(settingsFrom); };
@@ -418,6 +515,11 @@ function updateHud(dt) {
   $('motesLabel').textContent = `Đom đóm ${P.carried}/${cap}`;
   setCd($('cdDash'), P.charm > 0 ? 0 : P.dashCd / C.dash_cd_ticks, true);
   setCd($('cdPulse'), P.pulseCd / C.pulse_cd_ticks, P.carried >= TUNING.pulse_cost);
+  const st = s.story;
+  if (st?.mods.active) setCd($('cdAbility'), st.abilityCd / CARDS[st.mods.active].cd, true);
+  const boss = s.shades.find((x) => x.kind === 'boss');
+  $('bossBar').classList.toggle('hidden', !boss);
+  if (boss) $('bossHp').style.width = `${(100 * boss.hp) / MONSTERS.boss.hp}%`;
   const charm = $('charm');
   charm.classList.toggle('hidden', P.charm <= 0);
   if (P.charm > 0) $('charmT').textContent = `${Math.ceil(P.charm / TPS)}s`;
@@ -513,8 +615,13 @@ function handleEvents(events) {
         break;
       case 'pulse': stats.stuns += e.data.stunned_ids.length; fx.pulse(P.pos); audio.pulse(); break;
       case 'player_hit': audio.hit(); if (!reduceMotion) { shake = 1; flash(); } caption('Mây bị chạm!', 'hit'); if (e.data.by === 'fall') toast('Mây rơi xuống biển mây…', true); break;
-      case 'shade_spawned': { audio.spawn(); caption('Bóng Mực xuất hiện', 'shade'); const sh = sim.s.shades.find((x) => x.id === e.data.id); if (sh) spawnPointers.push({ id: sh.id, t: 5 }); break; }
+      case 'shade_spawned': { audio.spawn(); caption(`${MONSTERS[e.data.kind ?? 'ink'].name} xuất hiện`, 'shade'); const sh = sim.s.shades.find((x) => x.id === e.data.id); if (sh) spawnPointers.push({ id: sh.id, t: 5 }); break; }
       case 'dash': audio.dash(); break;
+      case 'armor_break': { const sh = sim.s.shades.find((x) => x.id === e.data.id); audio.hit(); if (sh) fx.burst([sh.pos[0], sh.pos[1] + 1, sh.pos[2]], 0x8a84a0, 30, 3); toast('Giáp Mực Khổng Lồ đã vỡ, Tỏa Sáng lần nữa!'); break; }
+      case 'phantom_blink': { const sh = sim.s.shades.find((x) => x.id === e.data.id); if (sh) fx.burst([sh.pos[0], sh.pos[1] + 0.5, sh.pos[2]], 0x7a3cff, 26, 2); caption('Mực Ma dịch chuyển!', 'shade'); break; }
+      case 'boss_hit': audio.bell(); if (!reduceMotion) shake = 0.6; toast(`Mẹ Mực trúng đòn, còn ${e.data.hp}/${MONSTERS.boss.hp} máu`); break;
+      case 'boss_defeated': { const b = sim.s.shades.find((x) => x.id === e.data.id) ?? { pos: [0, 1, 0] }; fx.burst([b.pos[0], b.pos[1] + 2, b.pos[2]], 0xffd27a, 120, 8); audio.win(); toast('Mẹ Mực đã tan vào ánh sáng!'); break; }
+      case 'ability': { const c = CARDS[e.data.card]; audio.charm(); fx.pulse(P.pos); toast(`${c.icon} ${c.name}`); break; }
       case 'charm_picked': audio.charm(); fx.burst([P.pos[0], P.pos[1] + 1.2, P.pos[2]], 0xff6a5a, 24, 3); toast('Bùa Gió: chạy nhanh hơn, lướt không cần hồi chiêu'); break;
       case 'drifter_steal': audio.steal(); toast(`Gió Lạc cướp mất ${e.data.amount} đom đóm! Tỏa Sáng để đòi lại`, true); break;
       case 'drifter_drop': fx.burst(sim.s.drifters.find((d) => d.id === e.data.drifter_id)?.pos ?? P.pos, 0xffe58a, 20, 3); toast('Gió Lạc đánh rơi đom đóm, nhặt lại nhanh!'); break;
@@ -532,6 +639,7 @@ function flash() {
   requestAnimationFrame(() => { el.style.transition = 'opacity 0.6s ease-out'; el.style.opacity = '0'; });
 }
 function showResult() {
+  if (storyRun) { storyResult(); return; }
   const s = sim.s, won = s.state === 'won';
   if (won) { run.nights.push({ night, score: s.score }); run.total += s.score; }
   if (won && night === 3) { showDawn(); return; }
@@ -621,7 +729,7 @@ function frame(ts = performance.now()) {
   for (const sh of s.shades) {
     alive.add(sh.id);
     let v = shadeViews.get(sh.id);
-    if (!v) { v = makeShade(scene); shadeViews.set(sh.id, v); }
+    if (!v) { v = makeShade(scene, sh.kind ?? 'ink'); shadeViews.set(sh.id, v); }
     v.update(dt, t, sh, pv);
   }
   for (const [id, v] of shadeViews) if (!alive.has(id)) { v.dispose(); shadeViews.delete(id); }
@@ -750,4 +858,4 @@ if (BENCH_MODE) {
 }
 
 // cho phép kiểm tra nhanh trong console (đo FPS, nhảy Đêm)
-window.__ddl = { get sim() { return sim; }, get mode() { return mode; }, get fps() { return fps; }, get info() { return { ...renderer.info.render, programs: renderer.info.programs?.length, geometries: renderer.info.memory.geometries }; }, setMode, startNight, world };
+window.__ddl = { get sim() { return sim; }, get mode() { return mode; }, get fps() { return fps; }, get info() { return { ...renderer.info.render, programs: renderer.info.programs?.length, geometries: renderer.info.memory.geometries }; }, setMode, startNight, startChapter, world };

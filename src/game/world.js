@@ -290,7 +290,17 @@ export function buildWorld(scene, renderer) {
 // ======================================================================
 // Hòn đảo của từng Đêm
 // ======================================================================
+// Mỗi đảo một vùng khí hậu: màu đất, màu cỏ, mật độ cỏ, loại cây.
+const BIOMES = {
+  1: { name: 'đồng cỏ', grass: 0x2f5d50, lite: 0x3d7563, dark: 0x1d3d37, sand: PAL.sand, sandBand: 4, blade: 0x4f9478, blades: 16000, flora: 'meadow' },
+  2: { name: 'nhiệt đới', grass: 0x3f6b33, lite: 0x5e8a3c, dark: 0x2c4f2a, sand: 0xe0c98f, sandBand: 9, blade: 0x7aa04a, blades: 12000, flora: 'tropic' },
+  3: { name: 'núi thu', grass: 0x5b5432, lite: 0x7a6a3a, dark: 0x3f3a26, sand: 0x9b8f7f, sandBand: 3, blade: 0xb0743a, blades: 15000, flora: 'autumn' },
+  4: { name: 'băng tuyết', grass: 0xd9e4ee, lite: 0xf2f7fc, dark: 0xb3c4d6, sand: 0xa9c4dc, sandBand: 3, blade: 0xe6eef6, blades: 5000, flora: 'snow' },
+  5: { name: 'đất mực', grass: 0x2a1d36, lite: 0x3e2752, dark: 0x170f20, sand: 0x4a2f5c, sandBand: 2.5, blade: 0x5a3a7a, blades: 9000, flora: 'corrupt' },
+};
+
 function buildIsland(map, uniforms) {
+  const biome = BIOMES[map.night] ?? BIOMES[1];
   const group = new THREE.Group();
   const updaters = [];
   const rng = makeRng(1000 + map.night * 17);
@@ -301,7 +311,9 @@ function buildIsland(map, uniforms) {
   const paths = []; // [x0,z0,x1,z1,width]
   for (const l of map.lanterns) {
     const isl = nearestIsland(map, l.pos[0], l.pos[2]);
+    if (isl.hole) continue;
     let sx = isl.c[0], sz = isl.c[1];
+    if (Math.hypot(l.pos[0] - sx, l.pos[2] - sz) < 3) continue;
     if (map.night === 3) {
       if (l.pos[1] > 0) continue;
       const d = Math.hypot(l.pos[0], l.pos[2]);
@@ -315,7 +327,7 @@ function buildIsland(map, uniforms) {
     const k = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / L2));
     return Math.hypot(x - (x0 + dx * k), z - (z0 + dz * k));
   };
-  const edgeDist = (x, z) => Math.max(...map.islands.map((i) => i.r - Math.hypot(x - i.c[0], z - i.c[1])));
+  const edgeDist = (x, z) => Math.max(...map.islands.map((i) => { const d = Math.hypot(x - i.c[0], z - i.c[1]); return i.hole ? Math.min(i.r - d, d - i.hole) : i.r - d; }));
   const isFlat = (x, z) => { const g = G(x, z); return g !== null && Number.isInteger(g) && g < 10; };
   const nearTierEdge = (x, z) => {
     if (map.night !== 3) return false;
@@ -357,11 +369,21 @@ function buildIsland(map, uniforms) {
 
   // ----- mặt đảo + vách đá cho từng đảo tròn
   for (const isl of map.islands) {
-    const top = new THREE.Mesh(islandTop(isl.r, rng), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+    const top = new THREE.Mesh(islandTop(isl.r, rng, biome, isl.hole ?? 0), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: map.night === 4 ? 0.6 : 0.95 }));
     top.position.set(isl.c[0], 0, isl.c[1]);
     top.receiveShadow = true;
     group.add(top);
     const cliff = new THREE.Mesh(cliffGeometry(isl.r, rng), mats.cliff);
+    if (isl.hole) {
+      // vách băng trong lòng hồ thủng, mờ dần xuống biển mây
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(isl.hole, isl.hole * 0.55, 26, 64, 1, true),
+        new THREE.MeshStandardMaterial({ color: 0x9fc4e0, emissive: 0x16324a, roughness: 0.3, metalness: 0.1, side: THREE.BackSide, transparent: true, opacity: 0.85 }));
+      wall.position.set(isl.c[0], -13, isl.c[1]);
+      group.add(wall);
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(isl.hole * 0.9, 48), new THREE.MeshBasicMaterial({ color: 0x5fb4ff, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.rotation.x = -Math.PI / 2; glow.position.set(isl.c[0], -6, isl.c[1]);
+      group.add(glow);
+    }
     cliff.position.set(isl.c[0], 0, isl.c[1]);
     cliff.receiveShadow = true;
     group.add(cliff);
@@ -380,12 +402,12 @@ function buildIsland(map, uniforms) {
 
   // ----- cỏ lay theo gió
   {
-    const N = { 1: 16000, 2: 14000, 3: 18000 }[map.night];
+    const N = biome.blades;
     const blade = new THREE.PlaneGeometry(0.08, 0.42, 1, 3);
     blade.translate(0, 0.21, 0);
     const bp = blade.attributes.position;
     for (let i = 0; i < bp.count; i++) { const y = bp.getY(i); bp.setX(i, bp.getX(i) * (1 - y / 0.6)); }
-    const mat = new THREE.MeshLambertMaterial({ color: 0x4f9478, side: THREE.DoubleSide });
+    const mat = new THREE.MeshLambertMaterial({ color: biome.blade, side: THREE.DoubleSide });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = uniforms.uTime;
       sh.uniforms.uDay = uniforms.uDay;
@@ -452,19 +474,42 @@ function buildIsland(map, uniforms) {
 
   // ----- cây cối theo từng đảo
   const shadowed = (o) => { o.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); return o; };
-  if (map.night === 2) {
-    place(34, 1.2, () => shadowed(arecaPalm(rng, mats)));
-    place(26, 0.6, () => shadowed(bush(rng, mats)));
-  } else {
-    place(map.night === 3 ? 22 : 26, 1.5, () => shadowed(pine(rng, mats)));
-    place(map.night === 3 ? 30 : 40, 0.6, () => shadowed(bush(rng, mats)));
+  switch (biome.flora) {
+    case 'tropic':
+      place(34, 1.2, () => shadowed(arecaPalm(rng, mats)));
+      place(26, 0.6, () => shadowed(bush(rng, mats)));
+      place(30, 0.4, () => shadowed(rock(rng, mats)));
+      place(18, 0.6, () => flowers(rng));
+      break;
+    case 'autumn':
+      place(26, 1.5, () => shadowed(maple(rng)));
+      place(10, 1.5, () => shadowed(pine(rng, mats)));
+      place(46, 0.4, () => shadowed(rock(rng, mats)));
+      place(14, 0.6, () => leafPile(rng));
+      break;
+    case 'snow':
+      place(30, 1.5, () => shadowed(snowPine(rng, mats)));
+      place(22, 0.8, () => shadowed(iceCrystal(rng, 0x9fd6ff)));
+      place(30, 0.4, () => shadowed(snowRock(rng, mats)));
+      break;
+    case 'corrupt':
+      place(22, 1.4, () => shadowed(deadTree(rng)));
+      place(26, 0.8, () => iceCrystal(rng, 0xa35cff, true));
+      place(14, 0.6, () => inkPool(rng));
+      place(24, 0.4, () => shadowed(rock(rng, mats)));
+      break;
+    default:
+      place(map.night === 3 ? 22 : 26, 1.5, () => shadowed(pine(rng, mats)));
+      place(map.night === 3 ? 30 : 40, 0.6, () => shadowed(bush(rng, mats)));
+      place(30, 0.4, () => shadowed(rock(rng, mats)));
+      place(7, 1.2, () => shadowed(bamboo(rng, mats)));
+      place(8, 0.6, () => flowers(rng));
   }
-  place(30, 0.4, () => shadowed(rock(rng, mats)));
-  place(map.night === 2 ? 4 : 7, 1.2, () => shadowed(bamboo(rng, mats)));
-  place(map.night === 3 ? 14 : 8, 0.6, () => flowers(rng));
-
   if (map.night === 1) dock(group, rng, mats, updaters);
   if (map.night === 2) bambooBridge(group, map, rng, mats);
+  if (map.bridges) for (const br of map.bridges) group.add(stoneArm(br, rng));
+  if (biome.flora === 'snow') group.add(snowfall(map, uniforms, updaters, rng));
+  if (biome.flora === 'corrupt') group.add(inkSpores(map, uniforms, updaters, rng));
   for (const p of map.pads) group.add(padView(p, uniforms, updaters));
 
   // ----- sương đen tím (tan dần khi đảo sáng lên, mất hẳn ban ngày)
@@ -528,30 +573,32 @@ function disposeTree(o) {
   o.traverse((c) => {
     if (c.geometry) c.geometry.dispose();
     const ms = Array.isArray(c.material) ? c.material : c.material ? [c.material] : [];
-    for (const m of ms) if (!Object.values(MATS || {}).flat().includes(m) && !Object.values(WALLS).includes(m)) m.dispose();
+    for (const m of ms) if (!Object.values(MATS || {}).flat().includes(m) && !Object.values(WALLS).includes(m) && !Object.values(M_).includes(m)) m.dispose();
   });
 }
 
 // Mặt đảo: đĩa nhiều vòng, tô màu cỏ loang và viền cát.
-function islandTop(R, rng) {
+function islandTop(R, rng, biome = null, hole = 0) {
   const rings = Math.round(R), seg = 160;
   const pos = [], col = [], idx = [];
-  const grass = new THREE.Color(PAL.grass), sand = new THREE.Color(PAL.sand), dark = new THREE.Color(0x1d3d37), lite = new THREE.Color(0x3d7563), c = new THREE.Color();
+  const B = biome ?? { grass: PAL.grass, sand: PAL.sand, dark: 0x1d3d37, lite: 0x3d7563, sandBand: 4 };
+  const grass = new THREE.Color(B.grass), sand = new THREE.Color(B.sand), dark = new THREE.Color(B.dark), lite = new THREE.Color(B.lite), c = new THREE.Color();
   const ox = rng.range(0, 50), oz = rng.range(0, 50);
   pos.push(0, 0, 0); c.copy(grass); col.push(c.r, c.g, c.b);
   for (let i = 1; i <= rings; i++) {
-    const r = (i / rings) * (R + 0.6);
+    const r = hole ? hole - 0.4 + (i / rings) * (R + 1 - hole) : (i / rings) * (R + 0.6);
     for (let j = 0; j < seg; j++) {
       const a = (j / seg) * Math.PI * 2;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       pos.push(x, 0, z);
       const n = Math.sin((x + ox) * 0.19 + 1.3) * Math.cos((z + oz) * 0.16) * 0.5 + Math.sin(x * 0.06 + z * 0.09) * 0.5;
       c.copy(grass).lerp(n > 0 ? lite : dark, Math.abs(n) * 0.6);
-      c.lerp(sand, THREE.MathUtils.smoothstep(r, R - 4, R - 1.4));
+      c.lerp(sand, THREE.MathUtils.smoothstep(r, R - B.sandBand, R - 1.4));
+      if (hole) c.lerp(sand, 1 - THREE.MathUtils.smoothstep(r, hole + 0.4, hole + 3));
       col.push(c.r, c.g, c.b);
     }
   }
-  for (let j = 0; j < seg; j++) idx.push(0, 1 + ((j + 1) % seg), 1 + j);
+  if (!hole) for (let j = 0; j < seg; j++) idx.push(0, 1 + ((j + 1) % seg), 1 + j);
   for (let i = 1; i < rings; i++) {
     const a0 = 1 + (i - 1) * seg, a1 = 1 + i * seg;
     for (let j = 0; j < seg; j++) {
@@ -781,11 +828,12 @@ function build3(group, map, mats, rng, updaters) {
   for (let i = segs; i >= 0; i--) { const a = (i / segs) * Math.PI; shape.lineTo(t1.r0 * Math.cos(a), -t1.r0 * Math.sin(a)); }
   const ext = new THREE.ExtrudeGeometry(shape, { depth: t1.y, bevelEnabled: false, curveSegments: 1 });
   ext.rotateX(-Math.PI / 2);
-  const tier1 = new THREE.Mesh(ext, [mats.grassTop, wallMaterial(0.25, 0.34)]);
+  const autumnTop = mat('autumnTop', { color: 0x6b5f35, roughness: 0.95 }); // mặt tầng theo màu đất thu
+  const tier1 = new THREE.Mesh(ext, [autumnTop, wallMaterial(0.25, 0.34)]);
   tier1.castShadow = tier1.receiveShadow = true;
   group.add(tier1);
   // tầng 2: đĩa r = 8, cao 6
-  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(t2.r, t2.r, t2.y, 64, 1), [wallMaterial(8, 2), mats.grassTop, mats.grassTop]);
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(t2.r, t2.r, t2.y, 64, 1), [wallMaterial(8, 2), autumnTop, autumnTop]);
   cyl.position.y = t2.y / 2;
   cyl.castShadow = cyl.receiveShadow = true;
   group.add(cyl);
@@ -1015,3 +1063,126 @@ export function groundAt(map, x, z) {
   return g === null ? null : Math.min(g, 14);
 }
 export { C };
+
+// ---------------- cây và đạo cụ theo vùng khí hậu (Cốt truyện)
+const M_ = {};
+const mat = (k, opts) => (M_[k] ??= new THREE.MeshStandardMaterial(opts));
+function maple(rng) {
+  const g = new THREE.Group();
+  const h = rng.range(2.6, 4.2);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.24, h, 6), mat('mapleTrunk', { color: 0x4a3222, roughness: 1 }));
+  trunk.position.y = h / 2; g.add(trunk);
+  const cols = [0xc2401f, 0xd9662a, 0xe0952f, 0xa8331c];
+  for (let k = 0; k < 5; k++) {
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(rng.range(0.8, 1.3), 0), mat('maple' + (k % 4), { color: cols[k % 4], roughness: 0.85, flatShading: true }));
+    b.position.set(rng.range(-0.9, 0.9), h + rng.range(-0.3, 0.8), rng.range(-0.9, 0.9));
+    g.add(b);
+  }
+  g.scale.setScalar(rng.range(0.9, 1.3));
+  return g;
+}
+function leafPile(rng) {
+  const g = new THREE.Group();
+  const cols = [0xc2401f, 0xe0952f, 0xd9662a];
+  for (let k = 0; k < 18; k++) {
+    const l = new THREE.Mesh(new THREE.CircleGeometry(0.12, 5), mat('leaf' + (k % 3), { color: cols[k % 3], roughness: 0.9, side: THREE.DoubleSide }));
+    l.rotation.x = -Math.PI / 2; l.rotation.z = rng.range(0, 6);
+    l.position.set(rng.range(-1.2, 1.2), 0.03, rng.range(-1.2, 1.2));
+    g.add(l);
+  }
+  return g;
+}
+function snowPine(rng, mats) {
+  const g = pine(rng, mats);
+  const snow = mat('snowCap', { color: 0xf4f8fc, roughness: 0.7, flatShading: true });
+  g.children.forEach((c, i) => { if (i > 0) { const cap = c.clone(); cap.material = snow; cap.scale.set(0.75, 0.45, 0.75); cap.position.y += c.geometry.parameters.height * 0.32; g.add(cap); } });
+  return g;
+}
+function snowRock(rng, mats) {
+  const g = rock(rng, mats);
+  const cap = g.children[0].clone();
+  cap.material = mat('snowCap', { color: 0xf4f8fc, roughness: 0.7, flatShading: true });
+  cap.scale.multiply(new THREE.Vector3(0.9, 0.5, 0.9)); cap.position.y += 0.18;
+  g.add(cap);
+  return g;
+}
+function iceCrystal(rng, color, glow = false) {
+  const g = new THREE.Group();
+  const m = mat('crystal' + color, { color, emissive: color, emissiveIntensity: glow ? 0.9 : 0.25, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.85, flatShading: true });
+  const n = 2 + rng.int(4);
+  for (let k = 0; k < n; k++) {
+    const h = rng.range(0.6, 1.8);
+    const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.25, 0), m);
+    c.scale.set(1, h * 2.2, 1);
+    c.position.set(rng.range(-0.5, 0.5), h * 0.45, rng.range(-0.5, 0.5));
+    c.rotation.set(rng.range(-0.3, 0.3), rng.range(0, 3), rng.range(-0.3, 0.3));
+    g.add(c);
+  }
+  return g;
+}
+function deadTree(rng) {
+  const g = new THREE.Group();
+  const m = mat('deadWood', { color: 0x2b2030, roughness: 1, flatShading: true });
+  const h = rng.range(2.5, 4.5);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.22, h, 5), m);
+  trunk.position.y = h / 2; trunk.rotation.z = rng.range(-0.15, 0.15); g.add(trunk);
+  for (let k = 0; k < 4; k++) {
+    const L = rng.range(0.8, 1.6);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.07, L, 4), m);
+    const a = rng.range(0, Math.PI * 2);
+    br.position.set(Math.cos(a) * 0.35, h * rng.range(0.55, 0.95), Math.sin(a) * 0.35);
+    br.rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9);
+    g.add(br);
+  }
+  return g;
+}
+function inkPool(rng) {
+  const p = new THREE.Mesh(new THREE.CircleGeometry(rng.range(1, 2.2), 20), mat('inkPool', { color: 0x120a1a, emissive: 0x3a1460, emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.4 }));
+  p.rotation.x = -Math.PI / 2; p.position.y = 0.02; p.scale.set(1, rng.range(0.6, 1), 1);
+  const g = new THREE.Group(); g.add(p); return g;
+}
+function stoneArm(b, rng) {
+  const g = new THREE.Group();
+  const w = b.x1 - b.x0, d = b.z1 - b.z0;
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), mat('armStone', { color: 0x3b2c48, roughness: 0.95, flatShading: true }));
+  slab.position.set((b.x0 + b.x1) / 2, -0.6, (b.z0 + b.z1) / 2);
+  slab.receiveShadow = true; g.add(slab);
+  const vein = new THREE.Mesh(new THREE.BoxGeometry(w > d ? w : 0.25, 0.02, w > d ? 0.25 : d), new THREE.MeshBasicMaterial({ color: 0xa35cff, transparent: true, opacity: 0.6 }));
+  vein.position.set((b.x0 + b.x1) / 2, 0.015, (b.z0 + b.z1) / 2); g.add(vein);
+  for (let k = 0; k < 6; k++) {
+    const r = new THREE.Mesh(new THREE.DodecahedronGeometry(rng.range(0.4, 0.9), 0), mat('armStone', {}));
+    r.position.set(rng.range(b.x0, b.x1), -1.4 - rng.range(0, 1.5), rng.range(b.z0, b.z1));
+    g.add(r);
+  }
+  return g;
+}
+function snowfall(map, uniforms, updaters, rng) {
+  const n = 1800, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) pos.set([rng.range(-55, 55), rng.range(0, 40), rng.range(-55, 55)], i * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.18, transparent: true, opacity: 0.85, depthWrite: false }));
+  updaters.push((t) => {
+    const p = geo.attributes.position.array;
+    for (let i = 0; i < n; i++) {
+      p[i * 3 + 1] -= 0.05 + (i % 7) * 0.006;
+      p[i * 3] += Math.sin(t * 0.7 + i) * 0.01;
+      if (p[i * 3 + 1] < -2) p[i * 3 + 1] = 40;
+    }
+    geo.attributes.position.needsUpdate = true;
+  });
+  return pts;
+}
+function inkSpores(map, uniforms, updaters, rng) {
+  const n = 700, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) pos.set([rng.range(-48, 48), rng.range(0, 14), rng.range(-48, 48)], i * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xb07cff, size: 0.22, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending }));
+  updaters.push((t) => {
+    const p = geo.attributes.position.array;
+    for (let i = 0; i < n; i++) { p[i * 3 + 1] += 0.012 + (i % 5) * 0.003; if (p[i * 3 + 1] > 14) p[i * 3 + 1] = 0; }
+    geo.attributes.position.needsUpdate = true;
+  });
+  return pts;
+}

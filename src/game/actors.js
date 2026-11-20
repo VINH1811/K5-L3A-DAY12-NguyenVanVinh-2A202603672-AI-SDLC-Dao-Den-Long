@@ -453,7 +453,50 @@ export function flushShadeSmoke() {
   SMOKE.dirty = false;
 }
 
-export function makeShade(scene) {
+// Hình dạng riêng của từng loại quái (chế độ Cốt truyện)
+const KIND_LOOK = {
+  ink: { scale: 1, lift: 0 },
+  bat: { scale: 0.62, lift: 0.4 },
+  giant: { scale: 1.75, lift: 0.55 },
+  phantom: { scale: 1.05, lift: 0.1 },
+  boss: { scale: 3.1, lift: 1.6 },
+};
+let SPIKE_GEO = null, WING_GEO = null;
+function kindExtras(kind, mat) {
+  const parts = { wings: [], spikes: [] };
+  const g = new THREE.Group();
+  if (kind === 'bat') {
+    WING_GEO ??= (() => { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(1.3, 0.35); sh.lineTo(1.0, -0.1); sh.lineTo(1.25, -0.45); sh.lineTo(0.5, -0.25); sh.lineTo(0, -0.3); return new THREE.ShapeGeometry(sh); })();
+    for (const side of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(side * 0.45, 0.2, 0);
+      const w = new THREE.Mesh(WING_GEO, mat);
+      w.scale.set(side, 1, 1);
+      w.material.side = THREE.DoubleSide;
+      pivot.add(w);
+      g.add(pivot);
+      parts.wings.push({ pivot, side });
+    }
+  }
+  if (kind === 'giant' || kind === 'boss') {
+    SPIKE_GEO ??= new THREE.ConeGeometry(0.16, 0.7, 5);
+    const n = kind === 'boss' ? 9 : 7;
+    const spikeMat = new THREE.MeshStandardMaterial({ color: kind === 'boss' ? 0x2a1240 : 0x3a3450, roughness: 0.4, metalness: 0.3, flatShading: true });
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const sp = new THREE.Mesh(SPIKE_GEO, spikeMat);
+      const crown = kind === 'boss';
+      sp.position.set(Math.cos(a) * (crown ? 0.45 : 0.62), crown ? 0.95 : 0.35, Math.sin(a) * (crown ? 0.45 : 0.62));
+      sp.rotation.set(Math.sin(a) * (crown ? 0.25 : 1.1), 0, -Math.cos(a) * (crown ? 0.25 : 1.1));
+      g.add(sp);
+      parts.spikes.push(sp);
+    }
+  }
+  return { g, parts };
+}
+
+export function makeShade(scene, kind = 'ink') {
+  const look = KIND_LOOK[kind] ?? KIND_LOOK.ink;
   const geo = shadeGeometry();
   const smoke = smokeSystem(scene);
   const slot = smoke.free.pop() ?? -1;
@@ -469,6 +512,12 @@ export function makeShade(scene) {
   eyeGlow.scale.set(1.6, 0.8, 1);
   eyeGlow.position.set(0, 0.18, 0.65);
   g.add(eyeGlow);
+  const extra = kindExtras(kind, mat);
+  g.add(extra.g);
+  if (kind === 'boss') {
+    // Mẹ Mực: thêm hai cặp mắt
+    for (const [x, y] of [[-0.3, 0.42], [0.3, 0.42]]) { const e2 = new THREE.Mesh(geo.eyes, eyeMat); e2.scale.setScalar(0.55); e2.position.set(x * 0.4, y, 0.05); g.add(e2); }
+  }
   const stars = [];
   for (let i = 0; i < 4; i++) {
     const s = new THREE.Sprite(starMat());
@@ -498,7 +547,7 @@ export function makeShade(scene) {
     mat.uniforms.uTime.value = t + ph;
     mat.uniforms.uFade.value = born;
     const hover = Math.sin(t * 2.4 + ph + vis.x) * 0.15;
-    g.position.set(vis.x, vis.y - 0.15 + hover - (1 - born) * 1.2, vis.z);
+    g.position.set(vis.x, vis.y - 0.15 + hover + look.lift - (1 - born) * 1.2, vis.z);
     // nhìn về Mây khi đuổi
     const mvx = vis.x - last.x, mvz = vis.z - last.z;
     let ty = yaw;
@@ -509,7 +558,11 @@ export function makeShade(scene) {
     last.copy(vis);
     const chase = sh.state === 'chase' ? 1 : 0;
     const drain = sh.state === 'drain' ? 1 : 0; // đang hút dầu: phồng xẹp nhanh như đang hút
-    g.scale.setScalar(Math.max(0.001, born * (1 + chase * 0.08 + Math.sin(t * 6) * 0.03 * chase + drain * (0.1 + Math.sin(t * 9) * 0.08))));
+    g.scale.setScalar(Math.max(0.001, look.scale * born * (1 + chase * 0.08 + Math.sin(t * 6) * 0.03 * chase + drain * (0.1 + Math.sin(t * 9) * 0.08))));
+    // cánh dơi vỗ, gai giáp rụng khi giáp vỡ, Mực Ma chập chờn
+    for (const w of extra.parts.wings) w.pivot.rotation.z = w.side * (0.25 + Math.sin(t * 22 + ph) * 0.7);
+    if (kind === 'giant') for (const sp of extra.parts.spikes) sp.visible = (sh.armor ?? 0) > 0;
+    if (kind === 'phantom') mat.uniforms.uFade.value = born * (0.35 + 0.3 * (0.5 + 0.5 * Math.sin(t * 7 + ph)));
     eyeMat.color.setHex(isStun ? 0x7a7590 : ACCESS.colorblind ? 0x00b3ff : 0xe6d6ff);
     eyes.scale.y = isStun ? 0.25 : 1;
     eyeGlow.material.opacity = (isStun ? 0.1 : 0.55 + chase * 0.4) * born;
