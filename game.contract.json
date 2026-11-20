@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "team": "2A202603672-nguyen-van-vinh",
   "build_cmd": "npm ci",
   "run_cmd": "npm start",
@@ -14,6 +14,8 @@
     "pulse_cost": 3,
     "pulse_radius": 5,
     "night1_duration_s": 300,
+    "night2_duration_s": 330,
+    "night3_duration_s": 360,
     "flames": 3,
     "invuln_s": 1.5,
     "hit_drop_ratio": 0.5,

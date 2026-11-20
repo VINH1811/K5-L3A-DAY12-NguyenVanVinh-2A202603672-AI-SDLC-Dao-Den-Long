@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Chế độ headless theo Test Contract v1.0.
-// node tools/headless.mjs --seed <int> --night 1 [--scenario f.json] [--inputs f.json] --ticks <int> --out f.jsonl [--snapshot-every 10]
+// Chế độ headless theo Test Contract v1.1.
+// node tools/headless.mjs --seed <int> --night 1|2|3 [--scenario f.json] [--inputs f.json] --ticks <int> --out f.jsonl [--snapshot-every 10]
 import fs from 'node:fs';
 import { createSim, ScenarioError } from '../src/sim/sim.js';
 
@@ -41,7 +41,7 @@ function readJson(file, what) {
   try { return JSON.parse(text); } catch (e) { throw new InputFormatError(`${what} không phải JSON hợp lệ: ${e.message}`); }
 }
 
-const BTN = ['jump', 'interact', 'pulse', 'dash'];
+const BTN = ['jump', 'interact', 'pulse', 'dash', 'pause'];
 function parseInputs(doc) {
   if (!doc || typeof doc !== 'object' || !Array.isArray(doc.frames)) throw new InputFormatError('inputs phải có mảng frames');
   let last = -1;
@@ -75,7 +75,8 @@ function main() {
 
   const lines = [];
   lines.push(JSON.stringify(sim.snapshot()));
-  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false };
+  for (const e of sim.drainEvents()) lines.push(JSON.stringify(e)); // night_start (tick 0)
+  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false };
   let fi = 0;
   for (let k = 0; k < args.ticks; k++) {
     while (fi < frames.length && frames[fi].tick === k) {
