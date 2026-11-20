@@ -4,6 +4,6 @@ dist/
 *.log
 out/
 .data/
-bench.json
-soak.json
+/bench.json
+/soak.json
 video/
