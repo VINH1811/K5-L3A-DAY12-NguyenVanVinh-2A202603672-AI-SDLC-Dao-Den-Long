@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Chế độ headless theo Test Contract v1.3.
-// node tools/headless.mjs --seed <int> --night 1|2|3 [--scenario f.json] [--inputs f.json] --ticks <int> --out f.jsonl [--snapshot-every 10]
+// node tools/headless.mjs --seed <int> --night 1|2|3 [--scenario f.json] [--inputs f.json] --ticks <int> --out f.jsonl [--snapshot-every 10] [--story story.json  (chế độ Cốt truyện, ngoài contract; Đêm 1–5)]
 import fs from 'node:fs';
 import { createSim, ScenarioError } from '../src/sim/sim.js';
 
@@ -27,7 +27,7 @@ function parseArgs(argv) {
   };
   const out = {
     seed: int('seed', true), night: int('night', true), ticks: int('ticks', true),
-    every: int('snapshot-every', false, 10), out: a.out, scenario: a.scenario, inputs: a.inputs,
+    every: int('snapshot-every', false, 10), out: a.out, scenario: a.scenario, inputs: a.inputs, story: a.story,
   };
   if (!out.out) throw new Error('thiếu --out');
   if (out.ticks < 0) throw new Error('--ticks phải ≥ 0');
@@ -41,7 +41,7 @@ function readJson(file, what) {
   try { return JSON.parse(text); } catch (e) { throw new InputFormatError(`${what} không phải JSON hợp lệ: ${e.message}`); }
 }
 
-const BTN = ['jump', 'interact', 'pulse', 'dash', 'pause'];
+const BTN = ['jump', 'interact', 'pulse', 'dash', 'pause', 'ability']; // ability (phím Q) chỉ có tác dụng với --story
 function parseInputs(doc) {
   if (!doc || typeof doc !== 'object' || !Array.isArray(doc.frames)) throw new InputFormatError('inputs phải có mảng frames');
   let last = -1;
@@ -63,20 +63,21 @@ function main() {
   let args;
   try { args = parseArgs(process.argv.slice(2)); } catch (e) { fail(e.message, 1); }
 
-  let scenario = null, frames = [];
+  let scenario = null, story = null, frames = [];
   try {
     if (args.scenario) scenario = readJson(args.scenario, 'scenario');
+    if (args.story) story = readJson(args.story, 'story');
     if (args.inputs) frames = parseInputs(readJson(args.inputs, 'inputs'));
   } catch (e) { fail(e.message, e instanceof InputFormatError ? 2 : 1); }
 
   let sim;
-  try { sim = createSim({ seed: args.seed, night: args.night, scenario }); }
+  try { sim = createSim({ seed: args.seed, night: args.night, scenario, story }); }
   catch (e) { fail(e.message, e instanceof ScenarioError ? 2 : 1); }
 
   const lines = [];
   lines.push(JSON.stringify(sim.snapshot()));
   for (const e of sim.drainEvents()) lines.push(JSON.stringify(e)); // night_start (tick 0)
-  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false };
+  const cur = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false, dash: false, pause: false, ability: false };
   let fi = 0;
   for (let k = 0; k < args.ticks; k++) {
     while (fi < frames.length && frames[fi].tick === k) {

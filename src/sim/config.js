@@ -239,5 +239,69 @@ const N3 = {
   },
 };
 
-export const NIGHTS = { 1: N1, 2: N2, 3: N3 };
+// ---------- Chế độ Cốt truyện (không thuộc Test Contract; headless chuẩn chỉ nhận Đêm 1–3)
+// Đêm 4 — Đảo Băng: đảo hình vành khăn r = 12–42 m, giữa là hồ băng thủng (rơi), có bão tuyết.
+const N4 = {
+  night: 4,
+  name: 'Đảo Băng',
+  duration_s: 300,
+  start: [0, 0, -27],
+  lanterns: [0, 60, 120, 180, 240, 300].map((a, i) => ({ id: `L${i + 1}`, pos: [27 * Math.cos(deg(a)), 0, 27 * Math.sin(deg(a))].map((v) => Math.round(v * 10) / 10) })),
+  moteSpots: [...ring(12, 19, 15, 30), ...ring(16, 35, 0, 22.5)],
+  shadeSpots: ring(12, 40, 15, 30),
+  shadeEvery: 420,
+  shadeMax: 8,
+  shadeSpeed: 4.2,
+  pads: [],
+  charms: [{ id: 'C1', pos: [0, 0, 35] }],
+  drifters: false,
+  wind: true,
+  islands: [{ c: [0, 0], r: 42, hole: 12 }],
+  ground(x, z) {
+    const r = hyp(x, z);
+    return r >= 12 && r <= 42 ? 0 : null;
+  },
+};
+
+// Đêm 5 — Đảo Mực: đĩa giữa r = 16 m nối 4 nhánh đá tới 4 bệ tròn r = 10 m; trùm Mẹ Mực ở giữa.
+const ARMS = [
+  { x0: 14, x1: 26, z0: -3, z1: 3 }, { x0: -26, x1: -14, z0: -3, z1: 3 },
+  { x0: -3, x1: 3, z0: 14, z1: 26 }, { x0: -3, x1: 3, z0: -26, z1: -14 },
+];
+const PLATS = [[34, 0], [0, 34], [-34, 0], [0, -34]];
+const N5 = {
+  night: 5,
+  name: 'Đảo Mực',
+  duration_s: 300,
+  start: [0, 0, -30],
+  lanterns: [
+    { id: 'L1', pos: [34, 0, 0] }, { id: 'L2', pos: [0, 0, 34] }, { id: 'L3', pos: [-34, 0, 0] },
+    { id: 'L4', pos: [0, 0, -40] }, { id: 'L5', pos: [0, 0, 11] },
+  ],
+  moteSpots: [
+    ...PLATS.flatMap(([cx, cz]) => ring(4, 6, 45, 90, 0, cx, cz)),
+    ...ring(8, 10, 0, 45),
+    [20, 0, 0], [-20, 0, 0], [0, 0, 20], [0, 0, -20],
+  ],
+  shadeSpots: [...PLATS.flatMap(([cx, cz]) => ring(2, 8, 60, 180, 0, cx, cz)), ...ring(4, 14, 45, 90)],
+  shadeEvery: 420,
+  shadeMax: 10,
+  shadeSpeed: 4.2,
+  pads: [],
+  charms: [{ id: 'C1', pos: [-34, 0, 6] }],
+  drifters: true,
+  wind: false,
+  islands: [{ c: [0, 0], r: 16 }, ...PLATS.map(([x, z]) => ({ c: [x, z], r: 10 }))],
+  bridges: ARMS,
+  boss: { pos: [0, 0, 0] },
+  ground(x, z) {
+    if (hyp(x, z) <= 16) return 0;
+    if (PLATS.some(([cx, cz]) => hyp(x - cx, z - cz) <= 10)) return 0;
+    if (ARMS.some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1)) return 0;
+    return null;
+  },
+};
+
+export const NIGHTS = { 1: N1, 2: N2, 3: N3, 4: N4, 5: N5 };
+export const STANDARD_NIGHTS = [1, 2, 3];
 export const NIGHT1 = N1;

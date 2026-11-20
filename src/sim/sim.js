@@ -1,7 +1,8 @@
 // Lõi mô phỏng Đảo Đèn Lồng: thuần logic, không phụ thuộc DOM/WebGL.
 // Chạy giống hệt nhau trong trình duyệt (bản có giao diện) và Node (headless).
-import { TPS, TUNING, C, NIGHTS, FUEL_UNIT } from './config.js';
+import { TPS, TUNING, C, NIGHTS, FUEL_UNIT, STANDARD_NIGHTS } from './config.js';
 import { makeRng } from './rng.js';
+import { CHAPTERS, MONSTERS, CARDS, cardMods, validStory } from './story.js';
 
 export class ScenarioError extends Error {}
 
@@ -22,16 +23,23 @@ const DRIFTER_STATES = ['idle', 'chase', 'flee'];
 
 // bench = true: cảnh benchmark Ticket-04 (tắt sinh thêm, sát thương, nhặt, hao dầu, kết thúc Đêm).
 // Mặc định false; headless theo contract không bao giờ bật.
-export function createSim({ seed = 1, night = 1, scenario = null, bench = false } = {}) {
+// story = { cards: [...] }: chế độ Cốt truyện (nhiều loại quái, trùm, thẻ năng lực, Đêm 4–5). Mặc định null:
+// mọi luật và output giữ đúng Test Contract.
+export function createSim({ seed = 1, night = 1, scenario = null, bench = false, story = null } = {}) {
   const map = NIGHTS[night];
-  if (!map) throw new ScenarioError(`night ${night} không tồn tại (chỉ có 1, 2, 3)`);
+  if (!map || (!story && !STANDARD_NIGHTS.includes(night))) throw new ScenarioError(`night ${night} không tồn tại (chỉ có 1, 2, 3)`);
+  if (story && !validStory(story)) throw new ScenarioError('story sai định dạng (cards phải là mảng id thẻ hợp lệ)');
   const rng = makeRng(seed);
   const ground = (x, z) => map.ground(x, z);
+  const mods = story ? cardMods(story.cards) : null;
+  const chapter = story ? CHAPTERS[night] : null;
 
   const s = {
     night,
     bench,
     map,
+    // chế độ Cốt truyện (null ở chế độ chuẩn)
+    story: story ? { cards: [...(story.cards ?? [])], mods, abilityCd: 0, bossDefeated: false, decayTick: 0 } : null,
     tick: 0, // số tick đã chạy (kể cả lúc tạm dừng)
     sim: 0, // số bước gameplay đã chạy (sim_tick)
     paused: false,
@@ -48,7 +56,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
     events: [],
     player: {
       pos: [...map.start], vel: [0, 0, 0], grounded: true, facing: [0, 1],
-      flames: TUNING.flames, carried: 0, invuln: 0, pulseCd: 0, dashCd: 0, charm: 0,
+      flames: mods?.flames ?? TUNING.flames, carried: 0, invuln: 0, pulseCd: 0, dashCd: 0, charm: 0,
       dashTicks: 0, dashDir: [0, 1], respawn: 0, dead: false, launch: null, lights: 0,
     },
     lanterns: map.lanterns.map((l) => ({ id: l.id, pos: [...l.pos], lit: false, deposited: 0, fuel: 0, everLit: false, relit: 0 })),
@@ -56,7 +64,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
     shades: [],
     drifters: [],
     charms: map.charms.map((c) => ({ id: c.id, pos: [...c.pos], available: true, respawn: 0 })),
-    prev: { jump: false, interact: false, pulse: false, dash: false, pause: false },
+    prev: { jump: false, interact: false, pulse: false, dash: false, pause: false, ability: false },
     // dữ liệu chỉ dùng để hiển thị (không ảnh hưởng logic)
     fx: { pulses: [], hits: 0, lits: [], launches: 0 },
   };
@@ -72,17 +80,34 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
     s.motes.push(m);
     return m;
   }
-  function addShade(pos, state = 'spawning', id = null) {
+  function addShade(pos, state = 'spawning', id = null, kind = 'ink') {
     const sh = {
       id: id ?? `S${s.nextShade++}`, pos: [pos[0], pos[1], pos[2]], state,
       stateTicks: state === 'spawning' ? C.shade_spawning_ticks : 0,
       stun: 0, push: [0, 0], pushTicks: 0, recoil: [0, 0], recoilTicks: 0,
       safeTicks: 0, safeVec: [0, 0], wanderTarget: null, wanderTicks: 0,
       target: null, drainTicks: 0, // đèn đang nhắm tới / số tick đã hút
+      kind, // chế độ Cốt truyện: ink | bat | giant | phantom | boss
     };
+    if (kind !== 'ink') {
+      const M = MONSTERS[kind];
+      sh.pos[1] = pos[1] - C.shade_y + M.y;
+      if (M.armor) { sh.armor = M.armor; sh.armorRegen = 0; }
+      if (M.blinkEvery) sh.blinkTicks = M.blinkEvery;
+      if (M.hp) { sh.hp = M.hp; sh.summonTicks = M.summonEvery; }
+    }
     s.shades.push(sh);
     return sh;
   }
+  const yOf = (sh) => (sh.kind && sh.kind !== 'ink' ? MONSTERS[sh.kind].y : C.shade_y);
+  // thông số di chuyển theo loại (ink dùng đúng số chuẩn)
+  const mstat = (sh) => {
+    const M = MONSTERS[sh.kind];
+    if (!M || sh.kind === 'ink') return { speed: map.shadeSpeed, wander: C.shade_wander_speed, detect: C.shade_detect, lose: C.shade_lose, hitR: TUNING.shade_hit_radius, y: C.shade_y };
+    return M;
+  };
+  // trùm xuất hiện ngay từ đầu chương cuối
+  if (chapter?.boss && map.boss) addShade([map.boss.pos[0], C.shade_y, map.boss.pos[2]], 'wander', 'B1', 'boss');
   function addDrifter(pos, id = null) {
     const d = { id: id ?? `D${s.nextDrifter++}`, pos: [pos[0], pos[1], pos[2]], state: 'idle', stolen: 0, flee: 0, target: null, targetTicks: 0, stole: false };
     s.drifters.push(d);
@@ -135,7 +160,8 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
         if (sh.state !== undefined && !SHADE_STATES.includes(sh.state)) throw new ScenarioError(`shade.state sai: ${sh.state}`);
         if (sh.state_ticks_left !== undefined && !isTicks(sh.state_ticks_left)) throw new ScenarioError('shade.state_ticks_left sai');
         const st = sh.state ?? 'wander';
-        const made = addShade(sh.pos, st, sh.id ?? null);
+        if (story && sh.kind !== undefined && !MONSTERS[sh.kind]) throw new ScenarioError(`shade.kind sai: ${sh.kind}`);
+        const made = addShade(sh.pos, st, sh.id ?? null, story && sh.kind ? sh.kind : 'ink'); // kind chỉ có hiệu lực ở chế độ Cốt truyện
         const left = sh.state_ticks_left;
         if (st === 'spawning') made.stateTicks = left ?? C.shade_spawning_ticks;
         if (st === 'stunned') made.stun = left ?? C.stun_ticks;
@@ -210,11 +236,11 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
     const P = s.player;
     const inp = {
       move: input.move ?? [0, 0], cam_yaw_deg: input.cam_yaw_deg ?? 0,
-      jump: !!input.jump, interact: !!input.interact, pulse: !!input.pulse, dash: !!input.dash, pause: !!input.pause,
+      jump: !!input.jump, interact: !!input.interact, pulse: !!input.pulse, dash: !!input.dash, pause: !!input.pause, ability: !!input.ability,
     };
     const edge = (k) => inp[k] && !s.prev[k];
-    const jumpE = edge('jump'), interactE = edge('interact'), pulseE = edge('pulse'), dashE = edge('dash'), pauseE = edge('pause');
-    s.prev = { jump: inp.jump, interact: inp.interact, pulse: inp.pulse, dash: inp.dash, pause: inp.pause };
+    const jumpE = edge('jump'), interactE = edge('interact'), pulseE = edge('pulse'), dashE = edge('dash'), pauseE = edge('pause'), abilityE = edge('ability');
+    s.prev = { jump: inp.jump, interact: inp.interact, pulse: inp.pulse, dash: inp.dash, pause: inp.pause, ability: inp.ability };
 
     // 1. đọc input: xử lý pause trước
     if (pauseE) {
@@ -238,11 +264,16 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
     s.motes = s.motes.filter((m) => m.ttl === null || m.ttl > 0);
     for (const c of s.charms) if (!c.available && c.respawn > 0 && --c.respawn === 0) c.available = true;
     updateWind();
+    if (s.story) {
+      if (s.story.abilityCd > 0) s.story.abilityCd--;
+      for (const sh of s.shades) if (sh.armorRegen > 0 && --sh.armorRegen === 0) sh.armor = MONSTERS[sh.kind].armor;
+    }
     // 2b. dầu: đèn sáng tự hao 1/s, mỗi Bóng Mực đang hút trừ thêm 5/s; hết dầu thì tắt ngay sau bước 2
     for (const l of s.lanterns) {
       if (!l.lit || bench) continue;
       const drainers = s.shades.filter((sh) => sh.state === 'drain' && sh.target === l.id).sort(byId);
-      l.fuel = Math.max(0, l.fuel - DECAY - DRAIN * drainers.length);
+      const decay = s.story && s.sim % s.story.mods.decayEvery !== 0 ? 0 : DECAY;
+      l.fuel = Math.max(0, l.fuel - decay - DRAIN * drainers.length);
       for (const sh of drainers) {
         if (++sh.drainTicks % C.drain_event_every === 0) emit('fuel_drain', { lantern_id: l.id, shade_id: sh.id, fuel: f1(l.fuel) });
       }
@@ -261,7 +292,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
       for (const m of [...s.motes].sort(byId)) {
         if (P.carried >= capacity()) break;
         if (m.born >= s.sim) continue; // thực thể mới chỉ tương tác được từ tick sau
-        if (distXZ(P.pos, m.pos) <= TUNING.pickup_radius && Math.abs(P.pos[1] - m.pos[1]) <= C.pickup_dy) {
+        if (distXZ(P.pos, m.pos) <= (mods?.pickupR ?? TUNING.pickup_radius) && Math.abs(P.pos[1] - m.pos[1]) <= C.pickup_dy) {
           s.motes.splice(s.motes.indexOf(m), 1);
           P.carried++;
           emit('mote_picked', { carried: P.carried });
@@ -331,6 +362,9 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
       }
     }
 
+    // 7a. (Cốt truyện) năng lực của thẻ chủ động — phím Q
+    if (s.story && active && abilityE && s.story.mods.active && s.story.abilityCd === 0) useAbility(s.story.mods.active);
+
     // 7. Tỏa Sáng
     if (active && pulseE && P.pulseCd === 0 && P.carried >= TUNING.pulse_cost) {
       P.carried -= TUNING.pulse_cost;
@@ -338,11 +372,22 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
       const c = [P.pos[0], P.pos[1] + C.pulse_center_dy, P.pos[2]];
       const d3 = (e) => Math.hypot(e.pos[0] - c[0], e.pos[1] - c[1], e.pos[2] - c[2]);
       const ids = [];
+      const pulseR = mods?.pulseR ?? TUNING.pulse_radius;
       for (const sh of [...s.shades].sort(byId)) {
-        if (d3(sh) > TUNING.pulse_radius) continue;
+        const reach = sh.kind === 'boss' ? pulseR + MONSTERS.boss.pulseReach : pulseR;
+        if (d3(sh) > reach) continue;
         let dx = sh.pos[0] - c[0], dz = sh.pos[2] - c[2];
         const dh = Math.hypot(dx, dz);
         if (dh === 0) { dx = 1; dz = 0; } else { dx /= dh; dz /= dh; }
+        if (sh.kind === 'boss') { hitBoss(sh, dx, dz); ids.push(sh.id); continue; }
+        if (sh.armor > 0) {
+          // Mực Khổng Lồ: lần đầu chỉ vỡ giáp, bị đẩy 1.5 m, chưa choáng
+          sh.armor--; sh.armorRegen = MONSTERS.giant.armorRegen;
+          sh.push = [(dx * 1.5) / C.push_ticks, (dz * 1.5) / C.push_ticks]; sh.pushTicks = C.push_ticks;
+          emit('armor_break', { id: sh.id });
+          s.score += TUNING.score.per_stun;
+          continue;
+        }
         const wasDrain = sh.state === 'drain';
         sh.state = 'stunned'; sh.stun = C.stun_ticks;
         sh.push = [(dx * TUNING.pulse_push_m) / C.push_ticks, (dz * TUNING.pulse_push_m) / C.push_ticks];
@@ -362,6 +407,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
           emit('drifter_drop', { drifter_id: d.id, amount });
         }
       }
+      s.shades = s.shades.filter((x) => !x.dead);
       emit('pulse', { stunned_ids: ids });
       s.fx.pulses.push({ tick: s.tick, pos: [...P.pos] });
     }
@@ -386,7 +432,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
     if (active && P.invuln === 0 && !bench) {
       for (const sh of [...s.shades].sort(byId)) {
         if ((sh.state !== 'wander' && sh.state !== 'chase') || sh.safeTicks > 0) continue;
-        if (distXZ(P.pos, sh.pos) <= TUNING.shade_hit_radius && Math.abs(P.pos[1] - sh.pos[1]) <= C.shade_hit_dy) {
+        if (distXZ(P.pos, sh.pos) <= (s.story ? mstat(sh).hitR : TUNING.shade_hit_radius) && Math.abs(P.pos[1] - sh.pos[1]) <= C.shade_hit_dy) {
           P.flames = Math.max(0, P.flames - 1);
           const dropped = Math.floor(P.carried * TUNING.hit_drop_ratio);
           P.carried -= dropped;
@@ -421,10 +467,11 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
         const valid = map.shadeSpots.filter((p) => distXZ(p, P.pos) >= C.shade_spawn_min_dist && !s.shades.some((sh) => distXZ(sh.pos, p) < 2));
         if (!valid.length) break;
         const sp = valid[rng.int(valid.length)];
-        const sh = addShade([sp[0], groundOr(sp) + C.shade_y, sp[2]]);
-        emit('shade_spawned', { id: sh.id });
+        const sh = addShade([sp[0], groundOr(sp) + C.shade_y, sp[2]], 'spawning', null, s.story ? pickKind() : 'ink');
+        emit('shade_spawned', s.story ? { id: sh.id, kind: sh.kind } : { id: sh.id });
       }
     }
+    if (s.story) bossSummon();
     if (s.randomDrifters && s.sim % C.drifter_every === 0 && s.drifters.length < C.drifter_max) {
       const sp = map.shadeSpots[rng.int(map.shadeSpots.length)];
       addDrifter([sp[0], groundOr(sp) + C.drifter_y, sp[2]]);
@@ -432,7 +479,12 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
 
     // 11. thắng / thua (Ticket-03): không còn thắng sớm; chỉ xét ở bình minh
     if (P.flames <= 0) end('lost', 'no_flames');
-    else if (s.timeLeft <= 0) {
+    else if (s.story?.bossDefeated) {
+      const lit = s.lanterns.filter((l) => l.lit);
+      s.score += STORY_BOSS_BONUS + P.flames * TUNING.score.per_flame_left;
+      for (const l of lit) s.score += TUNING.score.per_lit_at_dawn + Math.floor(l.fuel / FUEL_UNIT);
+      end('won', 'boss_defeated');
+    } else if (s.timeLeft <= 0) {
       const lit = s.lanterns.filter((l) => l.lit);
       if (lit.length >= litNeeded()) {
         for (const l of lit) s.score += TUNING.score.per_lit_at_dawn + Math.floor(l.fuel / FUEL_UNIT);
@@ -443,7 +495,67 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
   }
 
   const litNeeded = () => Math.ceil(TUNING.win_ratio * s.lanterns.length);
-  const capacity = () => Math.min(TUNING.capacity_max, TUNING.carry_capacity + C.capacity_per_light * s.player.lights);
+  const capacity = () => {
+    const bonus = mods?.capBonus ?? 0;
+    return Math.min(TUNING.capacity_max + bonus, TUNING.carry_capacity + bonus + C.capacity_per_light * s.player.lights);
+  };
+
+  // ---------- chế độ Cốt truyện
+  const STORY_BOSS_BONUS = 500;
+  function pickKind() {
+    const w = Object.entries(chapter.monsters);
+    let r = rng.next() * w.reduce((a, [, v]) => a + v, 0);
+    for (const [k, v] of w) { if ((r -= v) < 0) return k; }
+    return w[w.length - 1][0];
+  }
+  function hitBoss(b, dx, dz) {
+    const M = MONSTERS.boss;
+    b.hp--;
+    b.state = 'stunned'; b.stun = M.hitStun;
+    b.push = [(dx * 2) / C.push_ticks, (dz * 2) / C.push_ticks]; b.pushTicks = C.push_ticks;
+    s.score += 50;
+    emit('boss_hit', { id: b.id, hp: b.hp });
+    if (b.hp <= 0) {
+      b.dead = true;
+      s.story.bossDefeated = true;
+      emit('boss_defeated', { id: b.id });
+      for (const o of s.shades) if (o !== b) { o.state = 'stunned'; o.stun = 180; o.pushTicks = 0; }
+    }
+  }
+  function bossSummon() {
+    for (const b of s.shades) {
+      if (b.kind !== 'boss' || b.state === 'stunned') continue;
+      if (--b.summonTicks > 0) continue;
+      b.summonTicks = MONSTERS.boss.summonEvery;
+      for (let i = 0; i < MONSTERS.boss.summonN && s.shades.length < map.shadeMax + 3; i++) {
+        const a = rng.range(0, Math.PI * 2), x = b.pos[0] + Math.cos(a) * 4, z = b.pos[2] + Math.sin(a) * 4;
+        const g = ground(x, z);
+        if (g === null) continue;
+        const sh = addShade([x, g + C.shade_y, z], 'spawning', null, 'ink');
+        emit('shade_spawned', { id: sh.id, kind: 'ink', by: b.id });
+      }
+    }
+  }
+  function useAbility(id) {
+    const P = s.player;
+    const card = CARDS[id];
+    s.story.abilityCd = card.cd;
+    if (id === 'shield') P.invuln = Math.max(P.invuln, 180);
+    else if (id === 'freeze') {
+      for (const sh of s.shades) if (distXZ(sh.pos, P.pos) <= 15) { sh.state = 'stunned'; sh.stun = sh.kind === 'boss' ? 60 : 240; sh.pushTicks = 0; sh.drainTicks = 0; }
+    } else if (id === 'beacon') {
+      let best = null, bd = Infinity;
+      for (const l of s.lanterns) { if (!l.lit) continue; const d = distXZ(l.pos, P.pos); if (d < bd) { bd = d; best = l; } }
+      if (best) best.fuel = Math.min(FMAX, best.fuel + 40 * FUEL_UNIT);
+    } else if (id === 'blink') {
+      for (let d = 8; d >= 1; d -= 0.5) {
+        const x = P.pos[0] + P.facing[0] * d, z = P.pos[2] + P.facing[1] * d;
+        const g = ground(x, z);
+        if (g !== null && g <= P.pos[1] + C.step_up) { P.pos = [x, g, z]; P.vel = [0, 0, 0]; P.grounded = true; P.launch = null; break; }
+      }
+    }
+    emit('ability', { card: id, cd_s: r3(card.cd / TPS) });
+  }
   const safeLantern = (l) => l.lit && l.fuel >= FLOW;
   // số đom đóm dùng khi châm dầu: min(đang mang, ceil((100 − fuel) / 10))
   const refuelAmount = (l) => Math.min(s.player.carried, Math.ceil((FMAX - l.fuel) / FUEL_PER_MOTE));
@@ -504,9 +616,9 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
     const wlen = Math.hypot(wx, wz);
     if (wlen > 1e-9) P.facing = [wx / wlen, wz / wlen];
 
-    const speed = P.charm > 0 ? C.charm_speed : TUNING.player_speed;
+    const speed = (P.charm > 0 ? C.charm_speed : TUNING.player_speed) * (mods?.speedMul ?? 1);
     if (dashE && P.dashTicks === 0 && (P.dashCd === 0 || P.charm > 0)) {
-      P.dashTicks = C.dash_ticks; P.dashCd = P.charm > 0 ? 0 : C.dash_cd_ticks;
+      P.dashTicks = C.dash_ticks; P.dashCd = P.charm > 0 ? 0 : Math.round(C.dash_cd_ticks * (mods?.dashCdMul ?? 1));
       P.dashDir = wlen > 1e-9 ? [wx / wlen, wz / wlen] : [...P.facing];
       emit('dash', {});
     }
@@ -573,9 +685,10 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
   function shadeStep(sh, dx, dz) {
     const tryMove = (x, z) => {
       const g = ground(x, z);
-      const gy = sh.pos[1] - C.shade_y;
+      const yo = sh.kind && sh.kind !== 'ink' ? MONSTERS[sh.kind].y : C.shade_y;
+      const gy = sh.pos[1] - yo;
       if (g === null || g > gy + C.step_up) return false;
-      sh.pos[0] = x; sh.pos[2] = z; sh.pos[1] = g + C.shade_y;
+      sh.pos[0] = x; sh.pos[2] = z; sh.pos[1] = g + yo;
       return true;
     };
     if (tryMove(sh.pos[0] + dx, sh.pos[2] + dz)) return true;
@@ -587,7 +700,8 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
   function moveShade(sh, playerActive) {
     const P = s.player;
     const dt = 1 / TPS;
-    const spd = map.shadeSpeed;
+    const ms = mstat(sh); // ink: đúng số chuẩn; loại khác: thông số trong story.js
+    const spd = ms.speed;
     if (sh.safeTicks > 0) {
       shadeStep(sh, sh.safeVec[0], sh.safeVec[1]); sh.safeTicks--;
       if (sh.safeTicks === 0) {
@@ -598,7 +712,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
           const k = TUNING.safe_radius / d;
           const nx = l.pos[0] + (sh.pos[0] - l.pos[0]) * k, nz = l.pos[2] + (sh.pos[2] - l.pos[2]) * k;
           const g = ground(nx, nz);
-          if (g !== null) { sh.pos[0] = nx; sh.pos[2] = nz; sh.pos[1] = g + C.shade_y; }
+          if (g !== null) { sh.pos[0] = nx; sh.pos[2] = nz; sh.pos[1] = g + yOf(sh); }
         }
       }
       return;
@@ -616,7 +730,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
         if (--sh.recoilTicks <= 0) sh.state = 'wander';
         break;
       case 'wander': {
-        if (playerActive && distXZ(sh.pos, P.pos) <= C.shade_detect) { sh.state = 'chase'; toward(sh, P.pos, spd * dt); break; }
+        if (playerActive && distXZ(sh.pos, P.pos) <= ms.detect) { sh.state = 'chase'; toward(sh, P.pos, spd * dt); break; }
         // Ticket-03: tìm đèn yếu (< 30) gần nhất; không có thì về đèn tắt gần nhất; không có nữa thì lang thang
         const forced = sh.forced ? lanternById(sh.forced) : null;
         const L = forced && (!forced.lit || forced.fuel < FLOW) ? forced : pickLantern(sh);
@@ -624,7 +738,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
           sh.target = L.id;
           const d = distXZ(sh.pos, L.pos);
           if (L.lit && L.fuel < FLOW && d <= C.drain_reach) { sh.state = 'drain'; sh.drainTicks = 0; break; }
-          if (L.lit || d > 1.5) toward(sh, L.pos, C.shade_wander_speed * dt);
+          if (L.lit || d > 1.5) toward(sh, L.pos, ms.wander * dt);
           break;
         }
         sh.target = null;
@@ -633,7 +747,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
           sh.wanderTicks = 240;
         }
         sh.wanderTicks--;
-        toward(sh, sh.wanderTarget, C.shade_wander_speed * dt);
+        toward(sh, sh.wanderTarget, ms.wander * dt);
         break;
       }
       case 'drain': {
@@ -644,7 +758,17 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
         break;
       }
       case 'chase':
-        if (!playerActive || distXZ(sh.pos, P.pos) > C.shade_lose) { sh.state = 'wander'; sh.wanderTarget = null; break; }
+        if (!playerActive || distXZ(sh.pos, P.pos) > ms.lose) { sh.state = 'wander'; sh.wanderTarget = null; break; }
+        if (sh.kind === 'phantom' && --sh.blinkTicks <= 0) {
+          // Mực Ma: định kỳ dịch chuyển tới cách Mây 4 m (theo hướng từ Mây tới nó)
+          sh.blinkTicks = ms.blinkEvery;
+          const d = distXZ(sh.pos, P.pos);
+          if (d > ms.blinkDist + 1) {
+            const x = P.pos[0] + ((sh.pos[0] - P.pos[0]) / d) * ms.blinkDist, z = P.pos[2] + ((sh.pos[2] - P.pos[2]) / d) * ms.blinkDist;
+            const g = ground(x, z);
+            if (g !== null) { sh.pos = [x, g + ms.y, z]; emit('phantom_blink', { id: sh.id }); break; }
+          }
+        }
         toward(sh, P.pos, spd * dt);
         break;
     }
@@ -656,7 +780,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
         const k = TUNING.safe_radius / d;
         const nx = l.pos[0] + (sh.pos[0] - l.pos[0]) * k, nz = l.pos[2] + (sh.pos[2] - l.pos[2]) * k;
         const g = ground(nx, nz);
-        if (g !== null) { sh.pos[0] = nx; sh.pos[2] = nz; sh.pos[1] = g + C.shade_y; }
+        if (g !== null) { sh.pos[0] = nx; sh.pos[2] = nz; sh.pos[1] = g + yOf(sh); }
       }
     }
   }
@@ -713,7 +837,7 @@ export function createSim({ seed = 1, night = 1, scenario = null, bench = false 
         dash_cd_s: r3(P.dashCd / TPS), pulse_cd_s: r3(P.pulseCd / TPS), charm_s: r3(P.charm / TPS),
       },
       lanterns: s.lanterns.map((l) => ({ id: l.id, pos: l.pos.map(r3), lit: l.lit, deposited: l.deposited, fuel: l.lit ? f1(l.fuel) : 0, ever_lit: l.everLit, relit_count: l.relit })),
-      shades: [...s.shades].sort(byId).map((sh) => ({ id: sh.id, pos: sh.pos.map(r3), state: sh.state })),
+      shades: [...s.shades].sort(byId).map((sh) => (s.story ? { id: sh.id, pos: sh.pos.map(r3), state: sh.state, kind: sh.kind, ...(sh.hp !== undefined ? { hp: sh.hp } : {}), ...(sh.armor !== undefined ? { armor: sh.armor } : {}) } : { id: sh.id, pos: sh.pos.map(r3), state: sh.state })),
       motes_active: s.motes.length,
       motes: [...s.motes].sort(byId).map((m) => ({ id: m.id, pos: m.pos.map(r3), kind: m.kind, ttl_s: m.ttl === null ? null : r3(m.ttl / TPS) })),
       drifters: [...s.drifters].sort(byId).map((d) => ({ id: d.id, pos: d.pos.map(r3), state: d.state, stolen: d.stolen })),
