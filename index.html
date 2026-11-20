@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Đảo Đèn Lồng</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/game/style.css" />
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="vignette"></div>
+  <div id="hitflash"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="tl">
+      <div class="flames" id="flames"></div>
+      <div class="label">Ngọn Lửa</div>
+    </div>
+    <div class="tc">
+      <div class="night-name">Đêm 1 · Đảo Bến</div>
+      <div class="timer" id="timer">05:00</div>
+    </div>
+    <div class="tr">
+      <div class="stat"><span class="ico lantern-ico"></span><span id="lanterns">0/5</span></div>
+      <div class="stat score"><span id="score">0</span><small>điểm</small></div>
+    </div>
+    <div class="bc">
+      <div class="prompt hidden" id="prompt"><kbd>E</kbd> Nạp ánh sáng <span id="promptN">(0/10)</span></div>
+      <div class="motes" id="motes"></div>
+      <div class="label">Đom đóm</div>
+    </div>
+    <div class="br">
+      <div class="cd" id="cdDash"><svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="17"/><circle class="fg" cx="20" cy="20" r="17"/></svg><span>⇧</span><small>Lướt</small></div>
+      <div class="cd" id="cdPulse"><svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="17"/><circle class="fg" cx="20" cy="20" r="17"/></svg><span>F</span><small>Tỏa Sáng</small></div>
+    </div>
+    <div class="arrow hidden" id="arrow"><div class="arrow-in">➤</div></div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <!-- Màn hình tiêu đề -->
+  <div id="title" class="screen">
+    <div class="title-card">
+      <div class="eyebrow">Một câu chuyện cổ tích giữa biển mây</div>
+      <h1>Đảo Đèn Lồng</h1>
+      <p class="lore">Đêm nay sương đen đã nuốt hết ánh sáng của đảo. Mây — người giữ đèn nhỏ tuổi — phải gom những đốm đom đóm, thắp lại các <b>Đèn Lồng Lớn</b>, và tránh xa lũ <b class="danger">Bóng Mực</b> trong sương.</p>
+      <button class="btn primary" id="btnStart">Bắt đầu Đêm 1</button>
+      <div class="controls">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> di chuyển</div>
+        <div><kbd>Chuột</kbd> xoay camera</div>
+        <div><kbd>Space</kbd> nhảy</div>
+        <div><kbd>Shift</kbd> lướt</div>
+        <div><kbd>E</kbd> nạp đèn</div>
+        <div><kbd>F</kbd> / <kbd>Chuột phải</kbd> tỏa sáng</div>
+        <div><kbd>Esc</kbd> tạm dừng</div>
+        <div><kbd>M</kbd> tắt/bật tiếng</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Giới thiệu Đêm -->
+  <div id="intro" class="screen hidden">
+    <div class="intro-card">
+      <div class="eyebrow">Đêm 1</div>
+      <h2>Đảo Bến</h2>
+      <p class="quote">“Mây ơi, năm ngọn đèn quanh bến đã tắt cả rồi. Gom đom đóm, mười đốm cho mỗi đèn. Lũ Bóng Mực sợ ánh lửa — đứng gần đèn sáng là an toàn.”</p>
+      <div class="who">— Ông Đăng, người giữ đèn già</div>
+    </div>
+  </div>
+
+  <!-- Tạm dừng -->
+  <div id="pause" class="screen hidden">
+    <div class="panel">
+      <h2>Tạm dừng</h2>
+      <button class="btn primary" id="btnResume">Tiếp tục</button>
+      <button class="btn" id="btnRestart">Chơi lại Đêm</button>
+      <label class="slider">Âm lượng <input type="range" id="vol" min="0" max="1" step="0.05" /></label>
+      <label class="slider">Độ nhạy chuột <input type="range" id="sens" min="0.3" max="2.5" step="0.1" /></label>
+      <button class="btn ghost" id="btnMenu">Về menu</button>
+    </div>
+  </div>
+
+  <!-- Kết quả -->
+  <div id="result" class="screen hidden">
+    <div class="panel result">
+      <div class="eyebrow" id="resEyebrow">Bình minh</div>
+      <h2 id="resTitle">Đảo đã sáng!</h2>
+      <p id="resText"></p>
+      <div class="big-score"><span id="resScore">0</span><small>điểm</small></div>
+      <div class="res-grid" id="resGrid"></div>
+      <button class="btn primary" id="btnAgain">Chơi lại</button>
+      <button class="btn ghost" id="btnMenu2">Về menu</button>
+    </div>
+  </div>
+
+  <div id="loading"><div class="spinner"></div><div>Đang thắp đèn…</div></div>
+  <script type="module" src="/src/game/main.js"></script>
+</body>
+</html>
