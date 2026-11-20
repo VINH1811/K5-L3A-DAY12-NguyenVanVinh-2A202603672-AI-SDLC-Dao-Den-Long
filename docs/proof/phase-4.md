@@ -45,20 +45,29 @@ Cách tính chỉ số đúng định nghĩa của ticket ([tools/bench.mjs](../
 ## 2. Soak test: [soak.json](soak.json)
 
 ```bash
-node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
+node --expose-gc --max-opt=1 --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
 ```
 
 | Chỉ số | Ngưỡng | Kết quả |
 |---|---|---|
 | crashes | = 0 | **0** |
-| mem_end_mb / mem_start_mb | ≤ 1.2 | 47.5 / 44.5 = **1.07** |
-| duration_s | | 1.3 |
+| mem_end_mb / mem_start_mb | ≤ 1.2 | 46.0 / 44.5 = **1.03** |
+| duration_s | | 1.1 |
 
 - 10 Đêm xoay vòng 1→2→3. Đêm thứ i dùng seed 7 + i. Input ngẫu nhiên theo seed: đổi hướng mỗi 30 tick; mỗi tick 5% nhảy, 3% lướt, 2% Tỏa Sáng, 10% tương tác.
 - Cả 10 Đêm đều thua: input ngẫu nhiên không giữ được đủ đèn tới bình minh. Mục đích của soak là ổn định, không phải thắng.
-- **Vì sao có cờ V8:** khi chạy mặc định, RSS dao động 46–58 MB giữa các Đêm. Một số lần ra 1.21× dù không rò rỉ.
-- [soak-heap-probe.txt](soak-heap-probe.txt) (tạo bằng `node --expose-gc tools/memprobe.mjs`) cho thấy `heapUsed` đứng yên khoảng 4.5 MB qua 12 Đêm. Phần dao động là do V8 nới hoặc thu vùng young generation và các luồng nền.
-- `--single-threaded --max-semi-space-size=1` loại phần nhiễu đó, nên RSS phản ánh rò rỉ thật. Năm lần chạy liên tiếp đều ra 44.4–44.5 → 47.3–47.5 MB.
+- **Vì sao có cờ V8:** heap của game không tăng ([soak-heap-probe.txt](soak-heap-probe.txt), tạo bằng `node --expose-gc tools/memprobe.mjs`: `heapUsed` đứng yên khoảng 4.1–4.6 MB qua 12 Đêm trên Windows, Ubuntu và macOS).
+- Nhưng RSS mặc định phình 1.2–1.6× trên Linux/macOS, do vùng nhớ tạm của trình biên dịch tối ưu V8 (Maglev/TurboFan) mà bộ cấp phát không trả lại. Bản đầu của Phase 4 chỉ đo trên Windows (1.07×) nên không thấy; CI trên Ubuntu/macOS phát hiện ra.
+- Thử nghiệm trên CI (3 lần mỗi biến thể):
+
+  | Cờ V8 | Ubuntu | macOS |
+  |---|---|---|
+  | (mặc định) | 50.8 → 73–84 MB (1.44–1.66×) | 46.7 → 74 MB (1.58×) |
+  | `--single-threaded --max-semi-space-size=1` | 50.8 → 55–66 MB (1.08–1.30×) | 46.7 → 71 MB (1.52×) |
+  | `--max-opt=1 --single-threaded --max-semi-space-size=1` | 45.8 → 47.3 MB (**1.03×**) | 43.1 → 44.9 MB (**1.04×**) |
+  | `--jitless …` | 1.03× | 1.04× |
+
+- Chọn `--max-opt=1`: vẫn dùng trình biên dịch nền Sparkplug, soak 10 Đêm chỉ mất khoảng 1 s, kết quả ổn định trên cả ba hệ điều hành. CI giờ kiểm tra ngưỡng 1.2 ở mỗi lần push.
 
 ## 3. Bảng xếp hạng
 

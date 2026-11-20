@@ -10,7 +10,7 @@
 
 ### Thêm
 - `bench_cmd` (`node tools/bench.mjs --seed 42 --duration 30 --out bench.json`): cảnh benchmark chuẩn 1280×720, tắt vsync, xuất avg_fps / p1_low_fps / frame_ms_p95 / frames / load_ms.
-- `soak_cmd` (`node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs …`): 10 Đêm liên tiếp, input ngẫu nhiên theo seed, đo RSS.
+- `soak_cmd` (`node --expose-gc --max-opt=1 --single-threaded --max-semi-space-size=1 tools/soak.mjs …`): 10 Đêm liên tiếp, input ngẫu nhiên theo seed, đo RSS.
 - Chế độ `bench` trong sim (mặc định tắt; headless theo contract không đổi).
 - Bảng xếp hạng cục bộ:
   - top 10, lưu ra đĩa `.data/leaderboard.json` (bản tĩnh thì dùng localStorage);
@@ -25,6 +25,9 @@
 - Màn Cài đặt riêng, mở từ menu và từ màn tạm dừng.
 - CI GitHub Actions (Ubuntu + macOS): test, build, soak, headless.
 - LICENSE (MIT), CREDITS.md.
+
+### Sửa sau khi gắn tag lần đầu
+- Soak: thêm cờ `--max-opt=1` vào `soak_cmd`. CI trên Ubuntu/macOS cho thấy RSS phình 1.2–1.6× do vùng nhớ của trình biên dịch tối ưu V8, dù heap đứng yên. Có cờ này thì ra 1.03–1.04×. CI kiểm tra ngưỡng 1.2.
 
 ### Hiệu năng
 - Bóng Mực dùng chung geometry (thân + xúc tu gộp, mắt gộp) và một hệ hạt khói chung. Cảnh 200 con trên máy dev: avg 67 → 168 FPS, p1_low 30 → 114.

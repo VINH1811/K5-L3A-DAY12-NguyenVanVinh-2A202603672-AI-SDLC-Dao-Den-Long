@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "headless": "node tools/headless.mjs",
     "bench": "node tools/bench.mjs --seed 42 --duration 30 --out bench.json",
-    "soak": "node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json",
+    "soak": "node --expose-gc --max-opt=1 --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json",
     "test": "node --test tests/*.test.mjs"
   },
   "engines": {

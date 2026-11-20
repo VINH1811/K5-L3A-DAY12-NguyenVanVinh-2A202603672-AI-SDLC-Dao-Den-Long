@@ -20,6 +20,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: soak (10 Đêm)
-        run: node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json && cat soak.json
+        run: |
+          node --expose-gc --max-opt=1 --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
+          node -e "const s=require('./soak.json'); const r=s.mem_end_mb/s.mem_start_mb; console.log('crashes', s.crashes, 'mem ratio', r.toFixed(3)); if (s.crashes || r > 1.2) process.exit(1)"
       - name: headless một Đêm đầy đủ mỗi bản đồ
         run: for n in 1 2 3; do node tools/headless.mjs --seed 1 --night $n --ticks 21600 --out out$n.jsonl && tail -1 out$n.jsonl; done

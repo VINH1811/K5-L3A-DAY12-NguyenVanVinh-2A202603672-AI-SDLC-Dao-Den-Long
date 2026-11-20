@@ -24,7 +24,7 @@ test('contract v1.3: có bench_cmd, soak_cmd; giữ headless_cmd và tuning v1.2
 
 test('soak: chạy N Đêm xoay vòng, đúng định dạng, không crash, bộ nhớ ≤ 1.2×', () => {
   const out = path.join(tmp, 'soak.json');
-  const r = node(['--expose-gc', '--single-threaded', '--max-semi-space-size=1', 'tools/soak.mjs', '--seed', '7', '--nights', '4', '--out', out]);
+  const r = node(['--expose-gc', '--max-opt=1', '--single-threaded', '--max-semi-space-size=1', 'tools/soak.mjs', '--seed', '7', '--nights', '4', '--out', out]);
   assert.equal(r.status, 0, r.stderr);
   const s = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.equal(s.nights, 4);

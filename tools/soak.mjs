@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Soak test (Ticket-04): chạy headless N Đêm liên tiếp trong cùng một tiến trình.
-// node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
-// --single-threaded (không luồng GC/biên dịch nền) và --max-semi-space-size=1 giữ RSS ổn định để phản ánh rò rỉ thật
+// node --expose-gc --max-opt=1 --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
+// Cờ V8: --max-opt=1 (không dùng trình biên dịch tối ưu Maglev/TurboFan, vùng nhớ biên dịch của chúng làm RSS
+// phình 1.2–1.6× trên Linux/macOS dù heap đứng yên), --single-threaded, --max-semi-space-size=1: RSS phản ánh rò rỉ thật
 // (heapUsed đứng yên ~4.5 MB qua 12 Đêm; xem docs/proof/phase-4.md).
 // Đêm thứ i (i = 1..N) là Đêm ((i − 1) mod 3) + 1, dùng seed (seed + i). Input ngẫu nhiên theo seed:
 // mỗi 30 tick chọn lại hướng; mỗi tick 5% nhảy, 3% lướt, 2% tỏa sáng, 10% tương tác.

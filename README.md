@@ -107,7 +107,7 @@ node tools/start.mjs --export-leaderboard out.json
 ```bash
 npm run build
 node tools/bench.mjs --seed 42 --duration 30 --out bench.json
-node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
+node --expose-gc --max-opt=1 --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
 ```
 
 - **Bench**:
