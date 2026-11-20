@@ -89,6 +89,11 @@ export function makeAudio() {
     tick() { if (!ctx) return; tone(1200, { type: 'square', dur: 0.06, gain: 0.04 }); },
     win() { if (!ctx) return; [60, 64, 67, 72, 76, 79, 84].forEach((n, i) => tone(midi(n), { type: 'triangle', dur: 1.6, gain: 0.1, at: i * 0.12 })); },
     lose() { if (!ctx) return; [64, 60, 57, 52].forEach((n, i) => tone(midi(n), { type: 'sine', dur: 1.4, gain: 0.12, at: i * 0.3 })); },
+    wind() { if (!ctx) return; noise(2.6, { gain: 0.16, freq: 500, slide: 2.2, q: 0.6 }); noise(2.0, { gain: 0.08, freq: 1400, slide: 0.6, q: 1.5, at: 0.5 }); },
+    charm() { if (!ctx) return; [67, 71, 74, 79, 83].forEach((n, i) => tone(midi(n), { type: 'triangle', dur: 0.6, gain: 0.08, at: i * 0.05 })); },
+    steal() { if (!ctx) return; noise(0.5, { gain: 0.14, freq: 2500, slide: 0.25, q: 2 }); tone(midi(79), { dur: 0.4, gain: 0.07, slide: 0.5 }); },
+    bounce() { if (!ctx) return; tone(220, { type: 'sine', dur: 0.5, gain: 0.16, slide: 3 }); noise(0.4, { gain: 0.1, freq: 800, slide: 3 }); },
+    bell() { if (!ctx) return; [48, 60, 67, 76].forEach((n, i) => tone(midi(n), { type: 'sine', dur: 4, gain: 0.08 / (i + 1), attack: 0.002 })); },
   };
   return api;
 }

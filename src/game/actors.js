@@ -144,8 +144,10 @@ export function makePlayer(scene) {
     orbs.push(o);
   }
 
+  body.traverse((c) => { if (c.isMesh) c.castShadow = true; });
   scene.add(root);
   let walk = 0, yaw = 0, prevGrounded = true, squash = 0;
+  let groundFn = () => 0;
   const vis = new THREE.Vector3();
 
   function update(dt, t, P, interp) {
@@ -179,9 +181,10 @@ export function makePlayer(scene) {
     const blink = P.invuln > 0 && Math.floor(t * 14) % 2 === 0;
     body.visible = !(P.respawn > 0) && !blink;
     lampLight.intensity = 5.5 + Math.sin(t * 7) * 0.4 + Math.sin(t * 13) * 0.25;
-    shadow.position.set(vis.x, 0.02, vis.z);
-    shadow.visible = Math.hypot(vis.x, vis.z) < 40.5 && P.respawn === 0;
-    shadow.scale.setScalar(Math.max(0.3, 1 - Math.max(0, vis.y) * 0.25));
+    const gy = groundFn(vis.x, vis.z);
+    shadow.position.set(vis.x, (gy ?? 0) + 0.03, vis.z);
+    shadow.visible = gy !== null && gy <= vis.y + 0.2 && P.respawn === 0;
+    shadow.scale.setScalar(Math.max(0.3, 1 - Math.max(0, vis.y - (gy ?? 0)) * 0.25));
     // đom đóm đang mang
     orbs.forEach((o, i) => {
       o.visible = i < P.carried && body.visible;
@@ -191,15 +194,15 @@ export function makePlayer(scene) {
       o.material.opacity = 0.75 + 0.25 * Math.sin(t * 8 + i);
     });
   }
-  return { root, update };
+  return { root, update, setGround(fn) { groundFn = fn; } };
 }
 
 // ======================= ĐÈN LỒNG LỚN =======================
-export function makeLantern(scene, L) {
+export function makeLantern(scene, L, center = [0, 0]) {
   const g = new THREE.Group();
   g.position.set(L.pos[0], L.pos[1], L.pos[2]);
   // quay mặt về tâm đảo
-  g.rotation.y = Math.atan2(-L.pos[0], -L.pos[2]);
+  g.rotation.y = Math.atan2(center[0] - L.pos[0], center[1] - L.pos[2]);
   const wood = new THREE.MeshStandardMaterial({ color: PAL.wood, roughness: 0.9 });
   const stone = new THREE.MeshStandardMaterial({ color: 0x8d8579, roughness: 1, flatShading: true });
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.35, 8), stone);
@@ -298,6 +301,7 @@ export function makeLantern(scene, L) {
     g.add(s);
     deco.push(s);
   }
+  for (const m of [base, post, arm, cap]) { m.castShadow = true; m.receiveShadow = true; }
   scene.add(g);
 
   let lit = 0, flash = 0, wasLit = false;
@@ -325,7 +329,7 @@ export function makeLantern(scene, L) {
       s.material.opacity = lit * (0.5 + 0.5 * Math.sin(t * 3 + u.a * 4));
     }
   }
-  return { update, pos: g.position };
+  return { update, pos: g.position, dispose() { scene.remove(g); } };
 }
 
 // ======================= BÓNG MỰC =======================
@@ -551,4 +555,128 @@ export function makeFx(scene) {
     light.intensity = lightK * 90;
   }
   return { pulse, burst, update };
+}
+
+// ======================= GIÓ LẠC =======================
+// Dải lụa xám xanh uốn lượn; đom đóm cướp được bay theo đuôi.
+export function makeDrifter(scene) {
+  const g = new THREE.Group();
+  const segs = 24, len = 3.2;
+  const geo = new THREE.PlaneGeometry(len, 0.42, segs, 1);
+  const base = geo.attributes.position.array.slice();
+  const mat = new THREE.MeshStandardMaterial({ color: PAL.drifter, emissive: 0x3a5068, emissiveIntensity: 0.6, roughness: 0.5, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+  const ribbon = new THREE.Mesh(geo, mat);
+  g.add(ribbon);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xb8d0ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.scale.set(3, 1.4, 1); g.add(glow);
+  const loot = [];
+  for (let i = 0; i < 3; i++) {
+    const o = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: PAL.moteHalo, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    o.scale.setScalar(0.3); g.add(o); loot.push(o);
+  }
+  scene.add(g);
+  const vis = new THREE.Vector3(), last = new THREE.Vector3(), target = new THREE.Vector3();
+  let first = true, yaw = 0, fade = 0;
+  function update(dt, t, d) {
+    target.set(d.pos[0], d.pos[1], d.pos[2]);
+    if (first) { vis.copy(target); last.copy(target); first = false; }
+    vis.lerp(target, Math.min(1, dt * 20));
+    const mvx = vis.x - last.x, mvz = vis.z - last.z;
+    if (Math.hypot(mvx, mvz) > 1e-4) yaw = Math.atan2(mvx, mvz);
+    last.copy(vis);
+    fade = Math.min(1, fade + dt * 2);
+    g.position.copy(vis);
+    g.position.y += Math.sin(t * 2 + d.id.length) * 0.15;
+    g.rotation.y = yaw + Math.PI / 2;
+    const p = geo.attributes.position;
+    const sp = d.state === 'idle' ? 4 : 9;
+    for (let i = 0; i < p.count; i++) {
+      const k = base[i * 3] / len + 0.5;
+      p.setY(i, base[i * 3 + 1] + Math.sin(t * sp + k * 6) * 0.25 * k);
+      p.setZ(i, Math.cos(t * sp * 0.7 + k * 5) * 0.35 * k);
+    }
+    p.needsUpdate = true;
+    geo.computeVertexNormals();
+    mat.opacity = 0.92 * fade * (d.state === 'flee' ? 0.75 : 1);
+    mat.emissiveIntensity = d.state === 'chase' ? 1.1 : 0.5;
+    loot.forEach((o, i) => {
+      o.visible = i < d.stolen;
+      o.position.set(1.2 + i * 0.4, Math.sin(t * 8 + i) * 0.2, Math.cos(t * 6 + i) * 0.2);
+    });
+  }
+  return { update, dispose() { scene.remove(g); geo.dispose(); mat.dispose(); } };
+}
+
+// ======================= BÙA GIÓ =======================
+let charmTex = null;
+function makeCharmTexture() {
+  if (charmTex) return charmTex;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c8102e'; g.fillRect(0, 0, 128, 256);
+  g.strokeStyle = '#f2c14e'; g.lineWidth = 10; g.strokeRect(8, 8, 112, 240);
+  g.lineWidth = 3; g.strokeRect(20, 20, 88, 216);
+  // hoa văn xoáy gió
+  g.lineWidth = 5;
+  for (const [cy, r] of [[80, 26], [170, 30]]) {
+    g.beginPath();
+    for (let a = 0; a < Math.PI * 5; a += 0.1) { const rr = (a / (Math.PI * 5)) * r; const x = 64 + Math.cos(a) * rr, y = cy + Math.sin(a) * rr; if (a === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+    g.stroke();
+  }
+  charmTex = new THREE.CanvasTexture(c);
+  charmTex.colorSpace = THREE.SRGBColorSpace;
+  return charmTex;
+}
+export function makeCharm(scene, c) {
+  const g = new THREE.Group();
+  g.position.set(c.pos[0], c.pos[1], c.pos[2]);
+  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 1.1), new THREE.MeshStandardMaterial({ map: makeCharmTexture(), side: THREE.DoubleSide, emissive: 0x401010, emissiveIntensity: 0.6, roughness: 0.6 }));
+  card.position.y = 1.2;
+  g.add(card);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xff6a5a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.scale.setScalar(2.4); halo.position.y = 1.2; g.add(halo);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.85, 40), new THREE.MeshBasicMaterial({ color: PAL.gold, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);
+  scene.add(g);
+  let k = 1;
+  function update(dt, t, st) {
+    k += ((st.available ? 1 : 0) - k) * Math.min(1, dt * 5);
+    g.visible = k > 0.02;
+    card.rotation.y = t * 1.6;
+    card.position.y = 1.2 + Math.sin(t * 2) * 0.15;
+    g.scale.setScalar(Math.max(0.001, k));
+    halo.material.opacity = 0.4 + 0.2 * Math.sin(t * 4);
+  }
+  return { update, dispose() { scene.remove(g); } };
+}
+
+// ======================= GIÓ MẠNH (lá bay) =======================
+export function makeWindFx(scene) {
+  const n = 120;
+  const geo = new THREE.PlaneGeometry(0.16, 0.08);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6f9a4a, side: THREE.DoubleSide, roughness: 0.8 });
+  const inst = new THREE.InstancedMesh(geo, mat, n);
+  inst.frustumCulled = false;
+  const seeds = Array.from({ length: n }, () => [Math.random(), Math.random(), Math.random(), Math.random()]);
+  scene.add(inst);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+  let amt = 0;
+  function update(dt, t, center, dirDeg, strength) {
+    amt += (strength - amt) * Math.min(1, dt * 2);
+    const a = (dirDeg * Math.PI) / 180, dx = Math.cos(a), dz = Math.sin(a);
+    for (let i = 0; i < n; i++) {
+      const [u, v, w, z] = seeds[i];
+      const k = (t * (0.25 + u * 0.25) + v) % 1;
+      const along = (k - 0.5) * 40, side = (w - 0.5) * 30;
+      p.set(center.x + dx * along - dz * side, center.y + 0.5 + z * 5 + Math.sin(t * 3 + i) * 0.4, center.z + dz * along + dx * side);
+      e.set(t * (2 + u * 4) + i, t * 3 + v * 6, t * 2.5 + w * 5);
+      q.setFromEuler(e);
+      sc.setScalar(amt > 0.02 ? Math.max(0, amt * Math.sin(k * Math.PI) * 1.4) : 0);
+      m.compose(p, q, sc);
+      inst.setMatrixAt(i, m);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+  }
+  return { update };
 }

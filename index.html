@@ -21,7 +21,7 @@
       <div class="label">Ngọn Lửa</div>
     </div>
     <div class="tc">
-      <div class="night-name">Đêm 1 · Đảo Bến</div>
+      <div class="night-name" id="nightName">Đêm 1 · Đảo Bến</div>
       <div class="timer" id="timer">05:00</div>
     </div>
     <div class="tr">
@@ -33,6 +33,7 @@
       <div class="motes" id="motes"></div>
       <div class="label">Đom đóm</div>
     </div>
+    <div class="charm hidden" id="charm"><span class="charm-ico"></span>Bùa Gió <b id="charmT">10s</b></div>
     <div class="br">
       <div class="cd" id="cdDash"><svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="17"/><circle class="fg" cx="20" cy="20" r="17"/></svg><span>⇧</span><small>Lướt</small></div>
       <div class="cd" id="cdPulse"><svg viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="17"/><circle class="fg" cx="20" cy="20" r="17"/></svg><span>F</span><small>Tỏa Sáng</small></div>
@@ -46,8 +47,13 @@
     <div class="title-card">
       <div class="eyebrow">Một câu chuyện cổ tích giữa biển mây</div>
       <h1>Đảo Đèn Lồng</h1>
-      <p class="lore">Đêm nay sương đen đã nuốt hết ánh sáng của đảo. Mây — người giữ đèn nhỏ tuổi — phải gom những đốm đom đóm, thắp lại các <b>Đèn Lồng Lớn</b>, và tránh xa lũ <b class="danger">Bóng Mực</b> trong sương.</p>
-      <button class="btn primary" id="btnStart">Bắt đầu Đêm 1</button>
+      <p class="lore">Sương đen đã nuốt ánh sáng của ba hòn đảo. Mây, người giữ đèn nhỏ tuổi, phải gom đom đóm, thắp lại các <b>Đèn Lồng Lớn</b> qua ba Đêm, và tránh xa lũ <b class="danger">Bóng Mực</b> trong sương cho tới bình minh.</p>
+      <button class="btn primary" id="btnStart">Bắt đầu hành trình</button>
+      <div class="nights">
+        <button class="chip" data-night="1"><b>Đêm 1</b><span>Đảo Bến</span></button>
+        <button class="chip" data-night="2"><b>Đêm 2</b><span>Đảo Cau</span></button>
+        <button class="chip" data-night="3"><b>Đêm 3</b><span>Đảo Chuông</span></button>
+      </div>
       <div class="controls">
         <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> di chuyển</div>
         <div><kbd>Chuột</kbd> xoay camera</div>
@@ -64,9 +70,9 @@
   <!-- Giới thiệu Đêm -->
   <div id="intro" class="screen hidden">
     <div class="intro-card">
-      <div class="eyebrow">Đêm 1</div>
-      <h2>Đảo Bến</h2>
-      <p class="quote">“Mây ơi, năm ngọn đèn quanh bến đã tắt cả rồi. Gom đom đóm, mười đốm cho mỗi đèn. Lũ Bóng Mực sợ ánh lửa — đứng gần đèn sáng là an toàn.”</p>
+      <div class="eyebrow" id="introEyebrow">Đêm 1</div>
+      <h2 id="introTitle">Đảo Bến</h2>
+      <p class="quote" id="introQuote"></p>
       <div class="who">— Ông Đăng, người giữ đèn già</div>
     </div>
   </div>
@@ -93,6 +99,19 @@
       <div class="res-grid" id="resGrid"></div>
       <button class="btn primary" id="btnAgain">Chơi lại</button>
       <button class="btn ghost" id="btnMenu2">Về menu</button>
+    </div>
+  </div>
+
+  <!-- Bình Minh: thắng cả ba Đêm -->
+  <div id="dawn" class="screen hidden">
+    <div class="panel result dawn-card">
+      <div class="eyebrow">Bình Minh</div>
+      <h2>Ba hòn đảo đã sáng</h2>
+      <p>Mặt trời nhô lên khỏi biển mây. Lũ Bóng Mực tan vào nắng sớm, và Ông Đăng treo chiếc đèn nhỏ của Mây lên cột cao nhất của tháp chuông.</p>
+      <div class="big-score"><span id="dawnScore">0</span><small>tổng điểm</small></div>
+      <div class="res-grid" id="dawnGrid"></div>
+      <button class="btn primary" id="btnDawnAgain">Chơi lại hành trình</button>
+      <button class="btn ghost" id="btnMenu3">Về menu</button>
     </div>
   </div>
 
