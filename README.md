@@ -138,6 +138,19 @@ npm test
 
 80 test chạy bằng một lệnh. CI chạy lại mỗi lần push trên Ubuntu và macOS ([.github/workflows/test.yml](.github/workflows/test.yml)).
 
+Chạy toàn bộ kiểm chứng và lưu bằng chứng khớp commit (test, headless một Đêm đầy đủ mỗi bản đồ, soak):
+
+```bash
+node tools/proof.mjs --out docs/proof/latest
+```
+
+Kết quả nằm ở [docs/proof/latest/summary.md](docs/proof/latest/summary.md).
+
+**Harness cho agent:**
+- [AGENTS.md](AGENTS.md): lệnh, kiến trúc, quy ước.
+- Skill [verify-phase](.claude/skills/verify-phase/SKILL.md): các bước kiểm chứng và lưu bằng chứng trước khi báo xong hoặc gắn tag.
+- Hook `Stop` ([.claude/settings.json](.claude/settings.json) → [tools/hooks/stop-require-green.mjs](tools/hooks/stop-require-green.mjs)): khi agent định kết thúc mà có thay đổi trong `src/`, `tests/`, `tools/`, contract hoặc package, hook chạy test. Test đỏ thì chặn kết thúc và đưa danh sách test hỏng cho agent sửa tiếp.
+
 - `tests/phase4.test.mjs`: contract v1.3, soak (định dạng, 0 crash, bộ nhớ ≤ 1.2×, tất định), bảng xếp hạng (thứ tự, top 10, tên, lệnh xuất), cảnh benchmark và chế độ bench của sim.
 
 Các scenario headless còn lại đều chạy qua đúng lệnh CLI:
@@ -146,11 +159,11 @@ Các scenario headless còn lại đều chạy qua đúng lệnh CLI:
 - `tests/phase2.test.mjs`: mỗi tính năng của Ticket-02 có ít nhất một test, gồm cầu tre, bục nhảy, vách tầng, dốc, tháp, lướt, Bùa Gió, Gió Lạc, tạm dừng, gió mạnh, lịch sinh, tính tất định trên cả 3 Đêm và tốc độ chạy.
 - `tests/phase3.test.mjs`: dầu đèn, thắp lại, châm dầu, chọn đèn, `drain`, vùng an toàn dưới 30, luật thắng bình minh, sức chứa, scenario v1.2.
 
-Bảng nối từng yêu cầu với test nằm trong [docs/notes/phase-2-spec.md](docs/notes/phase-2-spec.md) và [docs/notes/phase-3-spec.md](docs/notes/phase-3-spec.md).
+Bảng nối từng yêu cầu với test nằm trong [phase-1-spec.md](docs/notes/phase-1-spec.md), [phase-2-spec.md](docs/notes/phase-2-spec.md) và [phase-3-spec.md](docs/notes/phase-3-spec.md); Phase 4 ở [docs/proof/phase-4.md](docs/proof/phase-4.md).
 
 ## Giả định
 
-Phase 1 đã dùng ngay số chuẩn. Các giả định của Phase 2 (điểm xuất phát Đêm 3, cách Bóng Mực xử lý vách tầng, Gió Lạc, gió mạnh…) ghi trong [docs/notes/phase-2-spec.md](docs/notes/phase-2-spec.md). Các giả định của Phase 3 (thứ tự hao/châm dầu, đích của Bóng Mực, `target_lantern_id`…) ghi trong [docs/notes/phase-3-spec.md](docs/notes/phase-3-spec.md). Hai giả định chính:
+Giả định của Phase 1 (hình dạng đảo, lịch sinh, trạng thái Bóng Mực, điểm…) ghi trong [docs/notes/phase-1-spec.md](docs/notes/phase-1-spec.md); Phase 1 đã dùng ngay số chuẩn. Các giả định của Phase 2 (điểm xuất phát Đêm 3, cách Bóng Mực xử lý vách tầng, Gió Lạc, gió mạnh…) ghi trong [docs/notes/phase-2-spec.md](docs/notes/phase-2-spec.md). Các giả định của Phase 3 (thứ tự hao/châm dầu, đích của Bóng Mực, `target_lantern_id`…) ghi trong [docs/notes/phase-3-spec.md](docs/notes/phase-3-spec.md). Hai giả định chính:
 
 - Đêm 3 xuất phát ở (0, 0, −20), vì điểm (0, 0, 0) nằm trong tháp chuông.
 - `player.invuln` trong snapshot là boolean.
@@ -161,7 +174,8 @@ Phase 1 đã dùng ngay số chuẩn. Các giả định của Phase 2 (điểm 
 src/sim/            lõi mô phỏng tất định (config: số chuẩn + bản đồ 3 Đêm, rng, sim, bench), dùng chung cho game và headless
 src/game/           phần hiển thị Three.js: world, actors, audio, controls (đổi phím), scores, HUD, main
 src/leaderboard.js  luật bảng xếp hạng (dùng chung trình duyệt / server / CLI)
-tools/              headless.mjs, bench.mjs, soak.mjs, start.mjs (run_cmd + xuất bảng xếp hạng), memprobe.mjs
+tools/              headless.mjs, bench.mjs, soak.mjs, start.mjs (run_cmd + xuất bảng xếp hạng), proof.mjs, memprobe.mjs, hooks/
+.claude/            settings.json (hook Stop), skills/verify-phase, launch.json (chạy game cho agent)
 tests/              test node:test + run.mjs (chạy CLI)
 docs/notes/         spec từng phase, giả định, tiêu chí nghiệm thu, ADR
 docs/proof/         bằng chứng đo (bench, soak) của Phase 4

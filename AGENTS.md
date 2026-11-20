@@ -5,6 +5,8 @@
 - Test (bắt buộc xanh trước khi kết thúc việc): `npm test` (CI chạy lại trên Ubuntu + macOS)
 - Bench: `node tools/bench.mjs --seed 42 --duration 30 --out bench.json` (cần Chrome/Edge; tự build dist/) · Soak: `npm run soak`
 - Xuất bảng xếp hạng: `node tools/start.mjs --export-leaderboard out.json`
+- Lưu bằng chứng khớp commit: `node tools/proof.mjs --out docs/proof/latest` (xem skill `verify-phase`)
+- Hook `Stop` chạy test khi có thay đổi mã nguồn; test đỏ thì chưa được kết thúc. Không né hook, không tắt test.
 - Headless: `node tools/headless.mjs --seed 1 --night 1|2|3 --ticks 600 --out out/x.jsonl` (Contract v1.3)
 
 ## Kiến trúc
