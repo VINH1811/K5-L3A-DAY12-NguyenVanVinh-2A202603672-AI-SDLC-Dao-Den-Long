@@ -2,13 +2,17 @@
 
 ## Lệnh
 - Cài: `npm ci` · Chạy game: `npm start` · Build tĩnh: `npm run build`
-- Test (bắt buộc xanh trước khi kết thúc việc): `npm test`
-- Headless: `node tools/headless.mjs --seed 1 --night 1|2|3 --ticks 600 --out out/x.jsonl` (Contract v1.2)
+- Test (bắt buộc xanh trước khi kết thúc việc): `npm test` (CI chạy lại trên Ubuntu + macOS)
+- Bench: `node tools/bench.mjs --seed 42 --duration 30 --out bench.json` (cần Chrome/Edge; tự build dist/) · Soak: `npm run soak`
+- Xuất bảng xếp hạng: `node tools/start.mjs --export-leaderboard out.json`
+- Headless: `node tools/headless.mjs --seed 1 --night 1|2|3 --ticks 600 --out out/x.jsonl` (Contract v1.3)
 
 ## Kiến trúc
 - `src/sim/` là lõi logic thuần, tất định. Không import DOM, Three.js, `Math.random`, `Date`. Ngẫu nhiên chỉ qua `makeRng(seed)`.
 - `src/game/` chỉ đọc trạng thái sim để vẽ/phát âm thanh. Không được sửa `sim.s` trong gameplay.
 - Phần sáng tạo thêm chỉ đặt ở `src/game/`; nếu buộc phải có trong sim thì phải tắt được khi headless.
+- Chế độ `bench` của sim (createSim({ bench: true })) chỉ dùng cho cảnh benchmark; headless theo contract không bao giờ bật. Cảnh bench tắt trang trí sáng tạo (`world.setCreative(false)`).
+- Hiệu năng: thực thể có số lượng lớn (Bóng Mực) phải dùng chung geometry/vật liệu; đo lại bằng bench sau khi đổi phần vẽ.
 
 ## Quy ước
 - Số liệu tuning chỉ sửa ở `src/sim/config.js`, rồi cập nhật `game.contract.json` (test so khớp hai nơi).

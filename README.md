@@ -1,22 +1,33 @@
 # Đảo Đèn Lồng
 
-> Video demo: *(sẽ thêm ở Phase 4)* · Tài liệu lab gốc: [LAB.md](LAB.md) · [CHANGELOG](CHANGELOG.md) · Spec: [Phase 2](docs/notes/phase-2-spec.md), [Phase 3](docs/notes/phase-3-spec.md) · [ADR-001 dầu đèn](docs/notes/adr-001-lantern-fuel.md)
+> Video demo: *(đang cập nhật, sẽ đính kèm Release v1.0.0)* · Tài liệu lab gốc: [LAB.md](LAB.md) · [CHANGELOG](CHANGELOG.md) · [CREDITS](CREDITS.md) · [LICENSE](LICENSE) · [Bằng chứng Phase 4](docs/proof/phase-4.md) · Spec: [Phase 2](docs/notes/phase-2-spec.md), [Phase 3](docs/notes/phase-3-spec.md) · [ADR-001 dầu đèn](docs/notes/adr-001-lantern-fuel.md)
 
 Game 3D góc nhìn thứ ba. Mây, người giữ đèn nhỏ tuổi đội nón lá, đi qua **ba hòn đảo giữa biển mây** trong ba Đêm. Mây gom đom đóm để thắp các Đèn Lồng Lớn, châm dầu để đèn không tắt, và đuổi lũ Bóng Mực hút dầu trong sương đen, **giữ đủ đèn sáng tới bình minh**. Thắng cả ba Đêm thì màn Bình Minh hiện tổng điểm. Bản web dùng Three.js. Logic game là một lõi mô phỏng tất định, chạy được cả trong trình duyệt lẫn Node (headless).
 
 ![Màn hình tiêu đề](docs/screenshots/title.jpg)
 ![Bóng Mực đuổi theo Mây](docs/screenshots/gameplay-shade.jpg)
 
-## Cài đặt và chạy (macOS / Linux / Windows, cần Node ≥ 18)
+## Yêu cầu hệ thống
+
+- macOS, Linux hoặc Windows; **Node.js ≥ 18** (đã thử với Node 22).
+- Trình duyệt có WebGL2: Chrome/Edge/Chromium (khuyến nghị), Firefox, Safari 16+.
+- GPU tích hợp trở lên. Benchmark trên máy dev (RTX 3060 Laptop) đạt 168 FPS ở 1280×720, xem [docs/proof/phase-4.md](docs/proof/phase-4.md).
+- Benchmark cần thêm Chrome, Edge hoặc Chromium cài sẵn (hoặc đặt biến `CHROME_PATH`).
+
+## Cài đặt và chạy
 
 ```bash
 npm ci
 npm start
 ```
 
-Trình duyệt mở `http://localhost:5173`. Bản tĩnh để phát hành: `npm run build`, kết quả nằm trong thư mục `dist/`.
+Trình duyệt mở `http://localhost:5173`. Bảng xếp hạng được lưu vào `.data/leaderboard.json`.
+
+Bản tĩnh để phát hành: `npm run build` tạo thư mục `dist/`. Có thể mở `dist/` bằng bất kỳ web server tĩnh nào, ví dụ `npx vite preview`. Khi mở kiểu này, bảng xếp hạng lưu trong trình duyệt.
 
 ## Điều khiển
+
+Phím mặc định dưới đây đổi được trong **Cài đặt** (ở menu hoặc màn tạm dừng). Game báo khi hai hành động trùng phím, và có nút khôi phục mặc định.
 
 | Phím | Hành động |
 |---|---|
@@ -26,7 +37,7 @@ Trình duyệt mở `http://localhost:5173`. Bản tĩnh để phát hành: `npm
 | Shift | Lướt |
 | E | Thắp đèn / thắp lại / châm dầu (khi đứng trong 2 m quanh chân cột) |
 | F / chuột phải | Tỏa Sáng (tốn 3 đom đóm) |
-| Esc / P | Tạm dừng: Tiếp tục / Chơi lại Đêm / âm lượng, độ nhạy chuột, **bảng màu dễ phân biệt** (được lưu lại) / Về menu |
+| Esc / P | Tạm dừng: Tiếp tục / Chơi lại Đêm / Cài đặt / Về menu |
 | M | Tắt/bật tiếng |
 
 ## Ba Đêm
@@ -66,7 +77,49 @@ Menu chính có nút **Bắt đầu hành trình** (Đêm 1 → 3) và nút ch�
 
 Tổng điểm của hành trình là tổng điểm các Đêm đã thắng.
 
-## Chế độ headless (Test Contract v1.2)
+## Cài đặt và dễ tiếp cận
+
+Tất cả được lưu giữa các lần mở game:
+- Âm lượng, độ nhạy chuột.
+- **Bảng màu dễ phân biệt**: Bóng Mực màu #00B3FF, cảnh báo màu trắng kèm ⚠.
+- **Giảm chuyển động**: tắt rung camera và chớp màn hình.
+- **Chữ lớn ×1.25**: chữ giao diện tối thiểu 18 px ở 1280×720.
+- **Đổi phím**.
+
+Khi chơi có phụ đề và chỉ báo hình ảnh cho các âm báo quan trọng:
+- Bóng Mực xuất hiện, kèm mũi tên ở mép màn hình chỉ tới nó;
+- gió sắp thổi;
+- 10 giây cuối;
+- đèn dưới 30 dầu.
+
+## Bảng xếp hạng
+
+- Sau màn Bình Minh, hoặc khi thua ở bất kỳ Đêm nào, nhập tên (3–12 ký tự: chữ, kể cả tiếng Việt có dấu, số, `_`) để lưu tổng điểm các Đêm đã thắng.
+- Giữ top 10: điểm giảm dần, bằng điểm thì ai đạt trước đứng trên. Xem ở menu → **Bảng xếp hạng**.
+- Xuất ra JSON:
+
+```bash
+node tools/start.mjs --export-leaderboard out.json
+```
+
+## Benchmark và soak test (Contract v1.3)
+
+```bash
+npm run build
+node tools/bench.mjs --seed 42 --duration 30 --out bench.json
+node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json
+```
+
+- **Bench**:
+  - Mở `dist/` trong Chrome/Edge/Chromium có sẵn trên máy, cửa sổ 1280×720, vsync tắt bằng cờ `--disable-gpu-vsync --disable-frame-rate-limit`.
+  - Chạy cảnh chuẩn: Đêm 1, 200 Bóng Mực, 100 đom đóm, L1–L3 sáng; camera bay tròn r = 30 m, cao 15 m, 15 s một vòng.
+  - 3 s khởi động rồi đo đúng `--duration` giây, rồi tự thoát.
+  - `peak_mem_mb` là `null` vì bản web không đo được RSS của trình duyệt (có thêm `js_heap_peak_mb` để tham khảo).
+  - Tự build nếu chưa có `dist/`.
+- **Soak**: 10 Đêm liên tiếp trong một tiến trình, input ngẫu nhiên theo seed. Cờ V8 giữ RSS ổn định; lý do và bằng chứng không rò rỉ ở [docs/proof/phase-4.md](docs/proof/phase-4.md).
+- Kết quả đo trên máy dev: [bench.json](docs/proof/bench.json), [soak.json](docs/proof/soak.json).
+
+## Chế độ headless (Test Contract v1.3)
 
 ```bash
 node tools/headless.mjs --seed 1 --night 1 --ticks 18000 --out out.jsonl [--scenario s.json] [--inputs i.json] [--snapshot-every 10]
@@ -83,7 +136,11 @@ node tools/headless.mjs --seed 1 --night 1 --ticks 18000 --out out.jsonl [--scen
 npm test
 ```
 
-70 scenario headless, tất cả chạy qua đúng lệnh CLI:
+80 test chạy bằng một lệnh. CI chạy lại mỗi lần push trên Ubuntu và macOS ([.github/workflows/test.yml](.github/workflows/test.yml)).
+
+- `tests/phase4.test.mjs`: contract v1.3, soak (định dạng, 0 crash, bộ nhớ ≤ 1.2×, tất định), bảng xếp hạng (thứ tự, top 10, tên, lệnh xuất), cảnh benchmark và chế độ bench của sim.
+
+Các scenario headless còn lại đều chạy qua đúng lệnh CLI:
 
 - `tests/headless.test.mjs`: hồi quy Phase 1 (19 test; test "won/all_lit" đã được thay theo Ticket-03).
 - `tests/phase2.test.mjs`: mỗi tính năng của Ticket-02 có ít nhất một test, gồm cầu tre, bục nhảy, vách tầng, dốc, tháp, lướt, Bùa Gió, Gió Lạc, tạm dừng, gió mạnh, lịch sinh, tính tất định trên cả 3 Đêm và tốc độ chạy.
@@ -101,11 +158,13 @@ Phase 1 đã dùng ngay số chuẩn. Các giả định của Phase 2 (điểm 
 ## Cấu trúc
 
 ```
-src/sim/      lõi mô phỏng tất định (config: số chuẩn + bản đồ 3 Đêm, rng, sim), dùng chung cho game và headless
-src/game/     phần hiển thị Three.js: world (bầu trời, đảo), actors, audio, HUD, main
-tools/        headless.mjs (CLI theo Test Contract)
-tests/        scenario headless (node:test) + run.mjs (chạy CLI)
-docs/notes/   spec, giả định, tiêu chí nghiệm thu
+src/sim/            lõi mô phỏng tất định (config: số chuẩn + bản đồ 3 Đêm, rng, sim, bench), dùng chung cho game và headless
+src/game/           phần hiển thị Three.js: world, actors, audio, controls (đổi phím), scores, HUD, main
+src/leaderboard.js  luật bảng xếp hạng (dùng chung trình duyệt / server / CLI)
+tools/              headless.mjs, bench.mjs, soak.mjs, start.mjs (run_cmd + xuất bảng xếp hạng), memprobe.mjs
+tests/              test node:test + run.mjs (chạy CLI)
+docs/notes/         spec từng phase, giả định, tiêu chí nghiệm thu, ADR
+docs/proof/         bằng chứng đo (bench, soak) của Phase 4
 ```
 
 ## Sáng tạo của tôi

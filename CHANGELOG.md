@@ -1,5 +1,34 @@
 # Changelog
 
+## [phase-4] v1.0.0, Contract v1.3: "Bình minh"
+
+### Thay đổi phá vỡ tương thích (breaking)
+- `contract_version` "1.2" → "1.3".
+- `run_cmd` đổi từ `npm start` sang `node tools/start.mjs`, để `--export-leaderboard` đi thẳng vào script, không bị npm nuốt.
+- `build_cmd` = `npm ci && npm run build`.
+- Esc/P vẫn là tạm dừng mặc định, nhưng mọi phím giờ đổi được; phím mũi tên chỉ là phím phụ khi không bị gán cho hành động khác.
+
+### Thêm
+- `bench_cmd` (`node tools/bench.mjs --seed 42 --duration 30 --out bench.json`): cảnh benchmark chuẩn 1280×720, tắt vsync, xuất avg_fps / p1_low_fps / frame_ms_p95 / frames / load_ms.
+- `soak_cmd` (`node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs …`): 10 Đêm liên tiếp, input ngẫu nhiên theo seed, đo RSS.
+- Chế độ `bench` trong sim (mặc định tắt; headless theo contract không đổi).
+- Bảng xếp hạng cục bộ:
+  - top 10, lưu ra đĩa `.data/leaderboard.json` (bản tĩnh thì dùng localStorage);
+  - nhập tên ở màn Bình Minh và khi thua;
+  - màn Bảng xếp hạng ở menu;
+  - `node tools/start.mjs --export-leaderboard out.json`.
+- Dễ tiếp cận:
+  - đổi phím 9 hành động, có phát hiện trùng phím và nút khôi phục mặc định;
+  - phụ đề / chỉ báo hình ảnh: Bóng Mực xuất hiện kèm mũi tên mép màn hình, gió sắp thổi, 10 s cuối, đèn < 30 dầu;
+  - giảm chuyển động;
+  - chữ tối thiểu 18 px, tùy chọn chữ lớn ×1.25.
+- Màn Cài đặt riêng, mở từ menu và từ màn tạm dừng.
+- CI GitHub Actions (Ubuntu + macOS): test, build, soak, headless.
+- LICENSE (MIT), CREDITS.md.
+
+### Hiệu năng
+- Bóng Mực dùng chung geometry (thân + xúc tu gộp, mắt gộp) và một hệ hạt khói chung. Cảnh 200 con trên máy dev: avg 67 → 168 FPS, p1_low 30 → 114.
+
 ## [phase-3] Contract v1.2: "Đèn cạn dầu"
 
 ### Thay đổi phá vỡ tương thích (breaking)

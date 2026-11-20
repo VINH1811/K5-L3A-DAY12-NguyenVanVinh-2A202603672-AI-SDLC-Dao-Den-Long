@@ -1,0 +1,25 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: soak (10 Đêm)
+        run: node --expose-gc --single-threaded --max-semi-space-size=1 tools/soak.mjs --seed 7 --nights 10 --out soak.json && cat soak.json
+      - name: headless một Đêm đầy đủ mỗi bản đồ
+        run: for n in 1 2 3; do node tools/headless.mjs --seed 1 --night $n --ticks 21600 --out out$n.jsonl && tail -1 out$n.jsonl; done
