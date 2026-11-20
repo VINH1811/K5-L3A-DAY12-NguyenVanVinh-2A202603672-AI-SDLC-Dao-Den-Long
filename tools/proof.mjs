@@ -20,6 +20,10 @@ fs.mkdirSync(outDir, { recursive: true });
 const sh = (cmd, args) => spawnSync(cmd, args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20 });
 const git = (...a) => sh('git', a).stdout.trim();
 const contract = JSON.parse(fs.readFileSync(path.join(ROOT, 'game.contract.json'), 'utf8'));
+// Trạng thái git chụp TRƯỚC khi ghi bằng chứng, bỏ qua chính thư mục đầu ra
+const outRel = path.relative(ROOT, outDir).split(path.sep).join('/');
+const dirty = git('status', '--porcelain').split('\n').map((l) => l.slice(3).trim()).filter((f) => f && !f.startsWith(outRel)).length > 0;
+const headShort = git('rev-parse', '--short', 'HEAD');
 
 // 1. test
 const tests = fs.readdirSync(path.join(ROOT, 'tests')).filter((f) => f.endsWith('.test.mjs')).map((f) => path.join('tests', f));
@@ -51,7 +55,7 @@ const soakOk = !!soak && soak.crashes === 0 && ratio <= 1.2;
 const ok = t.status === 0 && fail === 0 && ends.every(([, st]) => st === 0) && soakOk;
 const summary = `# Bằng chứng tự động
 
-- Commit: \`${git('rev-parse', '--short', 'HEAD')}\`${git('status', '--porcelain') ? ' (có thay đổi chưa commit)' : ''}
+- Commit: \`${headShort}\`${dirty ? ' (có thay đổi chưa commit)' : ''}
 - Thời điểm: ${new Date().toISOString()}
 - Node: ${process.version} · ${process.platform}/${process.arch}
 - Contract: v${contract.contract_version}
