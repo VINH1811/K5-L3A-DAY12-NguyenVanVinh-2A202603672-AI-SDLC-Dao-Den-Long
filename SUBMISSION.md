@@ -131,26 +131,26 @@ git push origin phase-2
 ## 7. Checklist trước khi nộp
 
 Sản phẩm
-- [ ] Repo ở chế độ Public, tên đúng quy ước.
-- [ ] Clone sạch sang thư mục khác, làm theo README (tối đa 3 lệnh), game chạy được.
-- [ ] Chế độ headless chạy đúng theo Test Contract.
-- [ ] Tag `phase-1` đến `phase-4` có đủ, trỏ đúng commit.
-- [ ] Release `v1.0.0` có bản chạy được.
+- [x] Repo ở chế độ Public, tên đúng quy ước.
+- [x] Clone sạch sang thư mục khác, làm theo README (tối đa 3 lệnh), game chạy được.
+- [x] Chế độ headless chạy đúng theo Test Contract.
+- [x] Tag `phase-1` đến `phase-4` có đủ, trỏ đúng commit.
+- [x] Release `v1.0.0` có bản chạy được.
 
 Bằng chứng và ghi chép
-- [ ] Mỗi phase có bằng chứng cho các yêu cầu chính; chỗ chưa đạt đã ghi trung thực.
-- [ ] Bằng chứng khớp mã ở tag tương ứng, không sửa tay.
-- [ ] Test cũ bị yêu cầu mới làm sai đã được sửa hoặc bỏ kèm lý do.
-- [ ] Có giả định cho chỗ mơ hồ, nhật ký dùng AI (gồm token/chi phí ước tính), retro.
+- [x] Mỗi phase có bằng chứng cho các yêu cầu chính; chỗ chưa đạt đã ghi trung thực.
+- [x] Bằng chứng khớp mã ở tag tương ứng, không sửa tay.
+- [x] Test cũ bị yêu cầu mới làm sai đã được sửa hoặc bỏ kèm lý do.
+- [x] Có giả định cho chỗ mơ hồ, nhật ký dùng AI (gồm token/chi phí ước tính), retro.
 
 Harness AI
-- [ ] File harness (AGENTS.md hoặc tương đương, skills, hooks, plugins...) còn trong repo và trong lịch sử git.
-- [ ] Nếu dùng công cụ không có file cấu hình, các lời nhắc chính được ghi trong nhật ký dùng AI.
+- [x] File harness (AGENTS.md hoặc tương đương, skills, hooks, plugins...) còn trong repo và trong lịch sử git.
+- [x] Nếu dùng công cụ không có file cấu hình, các lời nhắc chính được ghi trong nhật ký dùng AI.
 
 Video, giấy phép, bảo mật
-- [ ] Video `.mp4` dưới 5 phút, link ở đầu README, mở được khi chưa đăng nhập.
-- [ ] `CREDITS` ghi nguồn mọi asset, âm thanh, công cụ AI tạo nội dung; có `LICENSE`.
-- [ ] Không có `.env`, API key, token trong repo và trong lịch sử commit.
+- [x] Video `.mp4` dưới 5 phút, link ở đầu README, mở được khi chưa đăng nhập.
+- [x] `CREDITS` ghi nguồn mọi asset, âm thanh, công cụ AI tạo nội dung; có `LICENSE`.
+- [x] Không có `.env`, API key, token trong repo và trong lịch sử commit.
 
 ## 8. Mẹo kiểm tra nhanh
 
