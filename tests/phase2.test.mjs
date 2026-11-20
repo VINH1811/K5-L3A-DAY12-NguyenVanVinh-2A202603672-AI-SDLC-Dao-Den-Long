@@ -168,7 +168,7 @@ test('Tạm dừng: tick tăng, sim_tick / thời gian đứng yên, snapshot pa
   assert.equal(s30.sim_tick, 10);
   const last = r.snaps.at(-1);
   assert.equal(last.sim_tick, 100 - 40);
-  assert.equal(last.time_left_s, 300 - 60 / 60);
+  assert.equal(last.time_left_s, 240 - 60 / 60); // Ticket-03: Đêm 1 dài 240 s
 });
 
 test('Gió mạnh Đêm 3: 30 s một lần, 5 s, đẩy 2 m/s', () => {

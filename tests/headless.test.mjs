@@ -11,8 +11,8 @@ const quiet = { random_motes: false, random_shades: false };
 
 test('contract khớp với tuning trong code', () => {
   const c = JSON.parse(fs.readFileSync(path.join(ROOT, 'game.contract.json'), 'utf8'));
-  // v1.1 (Ticket-02): đổi phiên bản, thêm khóa dash_* và night2/3_duration_s
-  assert.equal(c.contract_version, '1.1');
+  // v1.2 (Ticket-03): thêm khóa dầu đèn / win_ratio / capacity_max, thời lượng Đêm 240/270/300
+  assert.equal(c.contract_version, '1.2');
   assert.deepEqual(Object.keys(c.tuning).sort(), Object.keys(TUNING).sort());
   for (const [k, v] of Object.entries(c.tuning)) assert.deepEqual(v, TUNING[k], `tuning.${k}`);
 });
@@ -24,7 +24,7 @@ test('snapshot tick 0, end là dòng cuối, đứng yên 600 tick', () => {
   assert.deepEqual(r.snaps[0].player.pos, [0, 0, 0]);
   assert.equal(r.snaps.length, 61);
   assert.deepEqual(r.end, { type: 'end', ticks: 600, state: 'playing', score: 0 });
-  assert.equal(r.snaps.at(-1).time_left_s, 290);
+  assert.equal(r.snaps.at(-1).time_left_s, 230); // Ticket-03: Đêm 1 dài 240 s
 });
 
 test('tất định: cùng seed → output giống hệt', () => {
@@ -72,17 +72,17 @@ test('nạp từng phần: đèn nhớ tiến độ', () => {
   assert.equal(r.snaps.at(-1).lanterns[0].lit, false);
 });
 
-test('thắp hết 5 đèn → won/all_lit kèm thưởng thời gian và Ngọn Lửa', () => {
+// [THAY THẾ bởi Ticket-03] Test "thắp hết 5 đèn → won/all_lit" cũ bị bỏ: luật thắng sớm và lý do all_lit
+// không còn. Thay bằng test dưới (thắp đủ không kết thúc Đêm) và các test bình minh trong tests/phase3.test.mjs.
+test('thắp hết 5 đèn không còn kết thúc Đêm (Ticket-03)', () => {
   const r = run({
     scenario: { ...quiet, motes: [], shades: [], player: { pos: [0, 0, 24], carried: 10 },
       lanterns: ['L2', 'L3', 'L4', 'L5'].map((id) => ({ id, lit: true })), time_left_s: 100 },
     ticks: 10, inputs: { frames: [{ tick: 0, interact: true }] },
   });
-  const go = r.events.find((e) => e.name === 'game_over');
-  assert.deepEqual(go.data, { result: 'won', reason: 'all_lit' });
-  assert.equal(r.end.state, 'won');
-  // 100 + 10*10 + floor(100 - 1/60)=99 s * 2 + 3 * 50
-  assert.equal(r.end.score, 100 + 100 + 99 * 2 + 150);
+  assert.equal(r.events.filter((e) => e.name === 'game_over').length, 0);
+  assert.equal(r.end.state, 'playing');
+  assert.equal(r.snaps.at(-1).lanterns.filter((l) => l.lit).length, 5);
 });
 
 test('Tỏa Sáng: trừ 3 đom đóm, choáng Bóng Mực trong 5 m, cộng điểm', () => {
