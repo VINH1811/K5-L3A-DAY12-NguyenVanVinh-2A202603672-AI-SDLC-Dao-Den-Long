@@ -26,18 +26,24 @@ Tôi và agent cùng thiết kế game; agent viết code theo thiết kế và 
 | Rà soát | "Bản này đã hết các yêu cầu và đúng yêu cầu của repo chưa", "còn gì nữa không": agent lập danh sách thiếu theo SUBMISSION/RUBRIC |
 
 ## Token / chi phí ước tính
-Số liệu lấy từ trang usage của tài khoản (claude.ai → Settings → Usage). Agent không tự đo được số token của chính nó.
+Số liệu thật, cộng từ log phiên Claude Code trên máy (`~/.claude/projects/<dự án>/*.jsonl`). Mỗi lượt trả lời có trường `usage`; mỗi lượt chỉ tính một lần. Model: Claude Opus. Ranh giới phase là thời điểm tôi gửi yêu cầu của phase đó.
 
-| Phase | Token ước tính | Ghi chú |
-|---|---|---|
-| 1 | _điền_ | Đọc toàn bộ repo + PRD, dựng lõi sim, game, 19 test; nhiều ảnh chụp để chỉnh hình |
-| 2 | _điền_ | Tốn nhất: viết lại sim cho 3 Đêm, dựng 3 đảo + đảo bay |
-| 3 | _điền_ | Chủ yếu sửa sim + test |
-| 4 | _điền_ | Bench, soak, bảng xếp hạng, dễ tiếp cận; thử nghiệm CI cho soak |
-| **Tổng** | _điền_ | |
+| Giai đoạn | Lượt | Output | Input mới | Cache ghi | Cache đọc | Tổng | Ghi chú |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Phase 1 | 83 | 116 K | <1 K | 0.26 M | 14.1 M | **14.5 M** | Đọc repo + PRD, lõi sim, game, 19 test; nhiều ảnh chụp để chỉnh hình |
+| Phase 2 | 68 | 139 K | <1 K | 0.24 M | 18.0 M | **18.4 M** | Viết lại sim cho 3 Đêm, dựng 3 đảo + đảo bay |
+| Phase 3 | 33 | 67 K | <1 K | 0.10 M | 13.4 M | **13.6 M** | Chủ yếu sửa sim + test |
+| Phase 4 | 53 | 91 K | <1 K | 0.13 M | 27.6 M | **27.8 M** | Bench, soak, bảng xếp hạng, dễ tiếp cận |
+| Phát hành + hoàn thiện | 87 | 70 K | <1 K | 0.10 M | 54.8 M | **55.0 M** | Push, Release, sửa soak sau CI, hook/skill, spec Phase 1, nhật ký, video |
+| **Tổng** | **324** | **483 K** | **<1 K** | **0.82 M** | **127.9 M** | **129.2 M** | |
+
+Cách đọc số:
+- Hơn 98% là *cache đọc*: mỗi lượt model đọc lại ngữ cảnh đã lưu trong bộ nhớ đệm. Loại token này rẻ hơn nhiều so với input mới.
+- Phần thật sự sinh ra (output) là khoảng 0.48 M token.
+- Ngữ cảnh càng dài thì mỗi lượt càng đắt. Vì vậy giai đoạn cuối tốn nhiều nhất dù làm ít việc nhất.
 
 **Cách đã tiết kiệm**
-- Một phiên làm việc liên tục, không mở lại từ đầu mỗi phase.
+- Ngữ cảnh được cache nên phần lớn token là cache đọc (rẻ), không phải input mới.
 - Kiểm chứng bằng test chạy qua CLI (rẻ) thay cho ảnh chụp mỗi khi có thể.
 - Sửa bằng patch nhỏ thay vì viết lại cả file.
 - Dùng `grep` để đọc đúng đoạn cần.
@@ -45,6 +51,7 @@ Số liệu lấy từ trang usage của tài khoản (claude.ai → Settings �
 **Chỗ đã tốn hơn cần thiết**
 - Chụp nhiều ảnh màn hình để chỉnh đồ họa ở Phase 1–2.
 - Làm đồ họa vượt yêu cầu; rubric không cộng điểm phần này.
+- Giữ một phiên quá dài. Từ Phase 4 trở đi mỗi lượt đọc lại ngữ cảnh rất lớn, nên giai đoạn phát hành chiếm khoảng 43% tổng token. Lần sau nên mở phiên mới cho mỗi phase, chỉ mang theo AGENTS.md và spec.
 
 ## Những lần AI sai và cách phát hiện
 | # | Lỗi | Phát hiện bằng | Sửa / chỉnh harness |

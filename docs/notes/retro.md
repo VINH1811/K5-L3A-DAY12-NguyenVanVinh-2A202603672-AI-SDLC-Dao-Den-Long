@@ -24,9 +24,11 @@
 - Chỉ kiểm chứng trên Windows. Lỗi soak chỉ lộ ra khi CI chạy trên Linux/macOS, sau khi đã gắn tag.
 - Không gắn tag đúng mốc giờ từng phase: các tag được tạo trong cùng một buổi.
 - Tốn token cho đồ họa vượt yêu cầu.
+- Giữ một phiên quá dài: tổng khoảng 129 M token (phần lớn là cache đọc), riêng giai đoạn phát hành chiếm khoảng 43%.
 
 **Nếu làm lại:**
 - Bật CI trên Ubuntu + macOS ngay từ Phase 1.
 - Gắn tag và push ngay khi hết giờ mỗi phase.
 - Đặt hook "test đỏ thì chưa được dừng" từ đầu, không đợi tới cuối.
 - Làm đúng yêu cầu trước, trau chuốt hình ảnh sau và có giới hạn.
+- Mở phiên agent mới cho mỗi phase, chỉ mang theo AGENTS.md và spec, để mỗi lượt không phải đọc lại ngữ cảnh dài.
