@@ -40,6 +40,12 @@ Phím mặc định dưới đây đổi được trong **Cài đặt** (ở men
 | Esc / P | Tạm dừng: Tiếp tục / Chơi lại Đêm / Cài đặt / Về menu |
 | M | Tắt/bật tiếng |
 
+## Chế độ Cốt truyện (mới)
+
+Menu → **Chế độ Cốt truyện**: 5 chương trên 5 hòn đảo với vùng khí hậu khác nhau (đồng cỏ, nhiệt đới, núi thu, băng tuyết, đất mực). Có 4 loại quái mới (Dơi Mực, Mực Khổng Lồ, Mực Ma, trùm Mẹ Mực) và 10 thẻ năng lực (thụ động, hoặc chủ động bằng phím **Q**). Thắng chương này mới mở chương sau. Chi tiết: [docs/notes/story-mode.md](docs/notes/story-mode.md).
+
+Chế độ này nằm ngoài Test Contract: không có `--story` thì headless giữ nguyên như bản chuẩn.
+
 ## Ba Đêm
 
 | Đêm | Đảo | Đèn (cần sáng lúc bình minh) | Thời gian | Điểm đặc biệt |

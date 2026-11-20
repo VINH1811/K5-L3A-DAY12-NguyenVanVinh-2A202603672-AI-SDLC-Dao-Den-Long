@@ -14,6 +14,7 @@
 - `src/game/` chỉ đọc trạng thái sim để vẽ/phát âm thanh. Không được sửa `sim.s` trong gameplay.
 - Phần sáng tạo thêm chỉ đặt ở `src/game/`; nếu buộc phải có trong sim thì phải tắt được khi headless.
 - Chế độ `bench` của sim (createSim({ bench: true })) chỉ dùng cho cảnh benchmark; headless theo contract không bao giờ bật. Cảnh bench tắt trang trí sáng tạo (`world.setCreative(false)`).
+- Chế độ Cốt truyện (`createSim({ story })`, CLI `--story`, `src/sim/story.js`): mọi luật mới phải nằm sau điều kiện `s.story`; headless không `--story` phải giữ output giống từng byte (so với `main` trước khi commit).
 - Hiệu năng: thực thể có số lượng lớn (Bóng Mực) phải dùng chung geometry/vật liệu; đo lại bằng bench sau khi đổi phần vẽ.
 
 ## Quy ước
