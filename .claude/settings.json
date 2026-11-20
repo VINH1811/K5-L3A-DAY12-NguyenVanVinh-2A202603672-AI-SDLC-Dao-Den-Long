@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node tools/hooks/stop-require-green.mjs",
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  }
+}
