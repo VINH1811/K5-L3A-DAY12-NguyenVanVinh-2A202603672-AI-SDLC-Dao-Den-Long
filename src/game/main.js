@@ -7,12 +7,18 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createSim } from '../sim/sim.js';
 import { TPS, TUNING, C, NIGHTS } from '../sim/config.js';
 import { buildWorld, groundAt } from './world.js';
-import { makePlayer, makeLantern, makeShade, makeMotes, makeFx, makeDrifter, makeCharm, makeWindFx, ACCESS } from './actors.js';
+import { makePlayer, makeLantern, makeShade, makeMotes, makeFx, makeDrifter, makeCharm, makeWindFx, ACCESS, flushShadeSmoke } from './actors.js';
 import { FUEL_UNIT } from '../sim/config.js';
+import { makeAudio } from './audio.js';
+import { ACTIONS, DEFAULT_KEYS, keyName, loadKeys, duplicates, codesFor } from './controls.js';
+import { loadBoard, saveScore } from './scores.js';
+import { validName, isoWithOffset } from '../leaderboard.js';
+import { benchScenario, benchCamera, BENCH } from '../sim/bench.js';
 
 const LOW_U = TUNING.low_fuel_threshold * FUEL_UNIT, MAX_U = TUNING.fuel_max * FUEL_UNIT;
 const litNeeded = (n) => Math.ceil(TUNING.win_ratio * n);
-import { makeAudio } from './audio.js';
+const params = new URLSearchParams(location.search);
+const BENCH_MODE = params.get('bench') === '1';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -23,7 +29,7 @@ const store = {
 // ---------- renderer
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(BENCH_MODE ? 1 : Math.min(window.devicePixelRatio, 1.5));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
@@ -34,7 +40,8 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.7, 0.5, 0.8);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
+  // cảnh benchmark luôn vẽ đúng 1280×720
+  const w = BENCH_MODE ? 1280 : window.innerWidth, h = BENCH_MODE ? 720 : window.innerHeight;
   renderer.setSize(w, h, false);
   composer.setSize(w, h);
   camera.aspect = w / h;
@@ -57,7 +64,7 @@ const player = makePlayer(scene);
 const motesView = makeMotes(scene);
 const fx = makeFx(scene);
 const windFx = makeWindFx(scene);
-let run = { total: 0, nights: [] }; // tổng điểm các Đêm đã thắng
+let run = { total: 0, nights: [], seed: 0, saved: false }; // tổng điểm các Đêm đã thắng
 
 const QUOTES = {
   1: '“Mây ơi, năm ngọn đèn quanh bến đã tắt cả rồi. Mười đốm đom đóm thắp một đèn, nhưng đèn sẽ cạn dầu: nhớ quay lại châm thêm. Giữ ít nhất ba ngọn sáng tới bình minh nhé.”',
@@ -90,6 +97,7 @@ function newSim(n, backdrop = false) {
   night = n;
   buildNightViews(n);
   const seed = backdrop ? 7 : (Date.now() & 0x7fffffff);
+  if (!backdrop && !run.seed) run.seed = seed;
   sim = createSim({
     seed, night: n,
     scenario: backdrop ? { lanterns: [{ id: 'L1', lit: true }, { id: 'L2', lit: true }, { id: 'L5', lit: true }], shades: [{ id: 'S1', pos: [-18, 1, 26] }, { id: 'S2', pos: [28, 1, -12] }] } : null,
@@ -108,15 +116,20 @@ const tapped = new Set();
 const btn = { jump: false, interact: false, pulse: false, dash: false };
 let mouseRight = false;
 let camYaw = 0, camPitch = 0.5, camDist = 9.5;
+let KEYS = loadKeys(store.get('keys', null));
+const isAct = (code, a) => codesFor(KEYS, a).includes(code);
+let capture = null; // hành động đang chờ nhấn phím mới
 window.addEventListener('keydown', (e) => {
+  if (capture) { e.preventDefault(); finishCapture(e.code); return; }
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
   if (e.repeat) return;
   keys.add(e.code);
   tapped.add(e.code); // giữ lần bấm tới tick kế tiếp, để bấm nhanh không bị mất
-  if (e.code === 'KeyE' && mode === 'play') interactHint();
-  if (e.code === 'KeyM') audio.setVolume(audio.volume > 0 ? 0 : store.get('vol', 0.8) || 0.8);
-  if ((e.code === 'Escape' || e.code === 'KeyP') && mode === 'play') setMode('paused');
-  else if ((e.code === 'KeyP') && mode === 'paused') setMode('play');
-  if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+  if (isAct(e.code, 'interact') && mode === 'play') interactHint();
+  if (e.code === 'KeyM' && !Object.values(KEYS).includes('KeyM')) audio.setVolume(audio.volume > 0 ? 0 : store.get('vol', 0.8) || 0.8);
+  if (isAct(e.code, 'pause') && mode === 'play') setMode('paused');
+  else if (isAct(e.code, 'pause') && mode === 'paused' && e.code !== 'Escape') setMode('play');
+  if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code) && mode === 'play') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => { keys.clear(); mouseRight = false; if (mode === 'play') setMode('paused'); });
@@ -140,16 +153,16 @@ document.addEventListener('pointerlockchange', () => {
 let lockedOnce = false;
 
 function readInput() {
-  const k = (c) => keys.has(c) || tapped.has(c);
+  const k = (a) => codesFor(KEYS, a).some((c) => keys.has(c) || tapped.has(c));
   let x = 0, z = 0;
-  if (k('KeyW') || k('ArrowUp')) z += 1;
-  if (k('KeyS') || k('ArrowDown')) z -= 1;
-  if (k('KeyA') || k('ArrowLeft')) x += 1; // +x là bên trái camera (trục Y hướng lên, nhìn về +Z)
-  if (k('KeyD') || k('ArrowRight')) x -= 1;
-  btn.jump = k('Space');
-  btn.interact = k('KeyE');
-  btn.pulse = k('KeyF') || mouseRight;
-  btn.dash = k('ShiftLeft') || k('ShiftRight');
+  if (k('up')) z += 1;
+  if (k('down')) z -= 1;
+  if (k('left')) x += 1; // +x là bên trái camera (trục Y hướng lên, nhìn về +Z)
+  if (k('right')) x -= 1;
+  btn.jump = k('jump');
+  btn.interact = k('interact');
+  btn.pulse = k('pulse') || mouseRight;
+  btn.dash = k('dash');
   tapped.clear();
   return { move: [x, z], cam_yaw_deg: (camYaw * 180) / Math.PI, ...btn };
 }
@@ -194,13 +207,14 @@ function interactHint() {
 // ---------- chế độ màn hình
 let mode = 'loading';
 let introT = 0, resultT = 0;
-const SCREENS = ['title', 'intro', 'pause', 'result', 'dawn'];
+const SCREENS = ['title', 'intro', 'pause', 'result', 'dawn', 'settings', 'board'];
+let settingsFrom = 'title';
 function setMode(m) {
   mode = m;
-  const show = { title: 'title', intro: 'intro', paused: 'pause', result: 'result', dawn: 'dawn' }[m];
+  const show = { title: 'title', intro: 'intro', paused: 'pause', result: 'result', dawn: 'dawn', settings: 'settings', board: 'board' }[m];
   for (const id of SCREENS) $(id).classList.toggle('hidden', id !== show);
-  $('hud').classList.toggle('hidden', !['play', 'paused', 'intro', 'ending'].includes(m));
-  if (m === 'paused' || m === 'result' || m === 'title' || m === 'dawn') { if (document.pointerLockElement) document.exitPointerLock(); keys.clear(); mouseRight = false; }
+  $('hud').classList.toggle('hidden', !['play', 'paused', 'intro', 'ending', 'settings'].includes(m) || (m === 'settings' && settingsFrom === 'title'));
+  if (!['play', 'intro', 'ending'].includes(m)) { if (document.pointerLockElement) document.exitPointerLock(); keys.clear(); mouseRight = false; }
   if (m === 'play') { canvas.requestPointerLock?.()?.catch?.(() => {}); }
 }
 function startNight(n) {
@@ -215,7 +229,7 @@ function startNight(n) {
   $('introQuote').textContent = QUOTES[n];
   setMode('intro');
 }
-function startRun(n) { run = { total: 0, nights: [] }; startNight(n); }
+function startRun(n) { run = { total: 0, nights: [], seed: 0, saved: false }; startNight(n); }
 $('btnStart').onclick = () => startRun(1);
 document.querySelectorAll('[data-night]').forEach((b) => { b.onclick = () => startRun(+b.dataset.night); });
 $('btnResume').onclick = () => setMode('play');
@@ -227,6 +241,11 @@ $('btnAgain').onclick = () => {
 const toMenu = () => { newSim(1, true); setMode('title'); };
 $('btnMenu').onclick = $('btnMenu2').onclick = $('btnMenu3').onclick = toMenu;
 $('btnDawnAgain').onclick = () => startRun(1);
+$('btnSettings').onclick = () => { settingsFrom = 'title'; setMode('settings'); renderKeys(); };
+$('btnPauseSettings').onclick = () => { settingsFrom = 'paused'; setMode('settings'); renderKeys(); };
+$('btnSettingsBack').onclick = () => { capture = null; setMode(settingsFrom); };
+$('btnBoard').onclick = () => { setMode('board'); renderBoard(); };
+$('btnBoardBack').onclick = () => setMode('title');
 $('vol').value = store.get('vol', 0.8);
 $('vol').oninput = (e) => { audio.setVolume(+e.target.value); store.set('vol', +e.target.value); };
 $('sens').value = sens;
@@ -240,12 +259,131 @@ function setColorblind(on) {
 }
 $('cb').onchange = (e) => setColorblind(e.target.checked);
 setColorblind(!!store.get('cb', false));
+// Giảm chuyển động: tắt rung camera và chớp màn hình
+let reduceMotion = !!store.get('reduceMotion', false);
+$('reduceMotion').checked = reduceMotion;
+$('reduceMotion').onchange = (e) => { reduceMotion = e.target.checked; store.set('reduceMotion', reduceMotion); };
+// Chữ lớn ×1.25
+function setLarge(on) { document.body.classList.toggle('large', on); $('largeText').checked = on; store.set('largeText', on); }
+$('largeText').onchange = (e) => setLarge(e.target.checked);
+setLarge(!!store.get('largeText', false));
+
+// ---------- đổi phím
+function renderKeys() {
+  const dup = duplicates(KEYS);
+  const dupActs = new Set(dup.flatMap(([, list]) => list));
+  $('keys').innerHTML = ACTIONS.map(([a, label]) => `<span>${label}</span><button type="button" class="keybtn${dupActs.has(a) ? ' dup' : ''}${capture === a ? ' wait' : ''}" data-act="${a}">${capture === a ? 'Nhấn phím…' : keyName(KEYS[a])}</button>`).join('');
+  $('keys').querySelectorAll('[data-act]').forEach((b) => { b.onclick = () => { capture = b.dataset.act; renderKeys(); }; });
+  const label = (a) => ACTIONS.find(([x]) => x === a)[1];
+  $('keysMsg').textContent = dup.length ? '⚠ Trùng phím: ' + dup.map(([c, list]) => `${keyName(c)} đang dùng cho ${list.map(label).join(' và ')}`).join('; ') : '';
+  $('keysMsg').classList.toggle('bad', dup.length > 0);
+  renderControlHints();
+}
+function finishCapture(code) {
+  const a = capture;
+  capture = null;
+  if (code !== 'Escape' || a === 'pause') { KEYS = { ...KEYS, [a]: code }; store.set('keys', KEYS); }
+  renderKeys();
+}
+$('btnKeysReset').onclick = () => { KEYS = { ...DEFAULT_KEYS }; store.set('keys', KEYS); capture = null; renderKeys(); };
+function renderControlHints() {
+  const K = (a) => `<kbd>${keyName(KEYS[a])}</kbd>`;
+  $('controlsList').innerHTML = [
+    `${K('up')}${K('left')}${K('down')}${K('right')} di chuyển`, '<kbd>Chuột</kbd> xoay camera',
+    `${K('jump')} nhảy`, `${K('dash')} lướt`, `${K('interact')} nạp đèn / châm dầu`,
+    `${K('pulse')} / <kbd>Chuột phải</kbd> tỏa sáng`, `${K('pause')} tạm dừng`, '<kbd>M</kbd> tắt/bật tiếng',
+  ].map((x) => `<div>${x}</div>`).join('');
+  $('promptKey').textContent = keyName(KEYS.interact);
+  const short = (c) => keyName(c).replace(/ (trái|phải)$/, '');
+  $('cdDashKey').textContent = short(KEYS.dash);
+  $('cdPulseKey').textContent = short(KEYS.pulse);
+}
+renderControlHints();
+
+// ---------- bảng xếp hạng
+async function renderBoard() {
+  $('boardList').innerHTML = '<li class="muted">Đang tải…</li>';
+  const { entries, disk } = await loadBoard();
+  $('boardList').innerHTML = entries.length
+    ? entries.map((e, i) => `<li><b>${i + 1}</b><span class="nm"></span><span class="nw">${e.nights_won}/3 Đêm</span><span class="sc">${e.score}</span></li>`).join('')
+    : '<li class="muted">Chưa có ai. Hãy là người đầu tiên!</li>';
+  [...$('boardList').querySelectorAll('.nm')].forEach((el, i) => { el.textContent = entries[i].name; });
+  $('boardNote').textContent = disk ? 'Lưu trên đĩa (.data/leaderboard.json)' : 'Bản tĩnh: lưu trong trình duyệt này';
+}
+function showSaveForm(panelId) {
+  const form = $('saveForm');
+  form.classList.toggle('hidden', run.saved);
+  $('saveMsg').textContent = '';
+  $('btnSave').disabled = false;
+  const panel = $(panelId).querySelector('.panel');
+  panel.insertBefore(form, panel.querySelector('.btn'));
+  $('playerName').value = store.get('lastName', '');
+}
+$('saveForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const name = $('playerName').value.trim();
+  if (!validName(name)) { $('saveMsg').textContent = 'Tên 3–12 ký tự: chữ, số hoặc dấu gạch dưới'; $('saveMsg').className = 'save-msg bad'; return; }
+  const entry = { name, score: run.total, nights_won: run.nights.length, achieved_at: isoWithOffset(new Date()), seed: run.seed || 0 };
+  try {
+    const { entries } = await saveScore(entry);
+    const rank = entries.findIndex((x) => x.name === entry.name.normalize('NFC') && x.achieved_at === entry.achieved_at);
+    run.saved = true;
+    store.set('lastName', name);
+    $('saveMsg').className = 'save-msg';
+    $('saveMsg').textContent = rank >= 0 ? `Đã lưu: hạng ${rank + 1} trong top 10` : 'Đã lưu (chưa lọt top 10)';
+    $('btnSave').disabled = true;
+  } catch (err) {
+    $('saveMsg').className = 'save-msg bad';
+    $('saveMsg').textContent = 'Không lưu được: ' + err.message;
+  }
+};
 
 // ---------- HUD
 const flamesEl = $('flames'), motesEl = $('motes');
 for (let i = 0; i < TUNING.flames; i++) flamesEl.appendChild(Object.assign(document.createElement('div'), { className: 'flame' }));
 for (let i = 0; i < TUNING.capacity_max; i++) motesEl.appendChild(Object.assign(document.createElement('div'), { className: 'mote' }));
 let toastTimer = 0;
+// Phụ đề / chỉ báo hình ảnh cho các tín hiệu âm thanh quan trọng
+const CAP_ICON = { shade: '◆', wind: '🍃', time: '⏳', fuel: '🏮', hit: '✦' };
+function caption(text, kind) {
+  if (mode !== 'play') return;
+  const el = document.createElement('div');
+  el.className = 'sub sub-' + kind;
+  el.innerHTML = `<i>${CAP_ICON[kind] ?? '•'}</i>`;
+  el.appendChild(document.createTextNode(text));
+  $('subs').appendChild(el);
+  while ($('subs').children.length > 4) $('subs').firstChild.remove();
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 500); }, 3500);
+}
+let spawnPointers = [];
+const ptrPool = [];
+// vị trí mũi tên ở mép màn hình cho điểm thế giới (x,y,z); null nếu điểm đang trong màn hình
+function edgeArrow(x, y, z) {
+  const v = new THREE.Vector3(x, y, z).project(camera);
+  const behind = v.z > 1;
+  if (!behind && Math.abs(v.x) <= 0.92 && Math.abs(v.y) <= 0.88) return null;
+  let ax = v.x, ay = v.y;
+  if (behind) { ax = -ax; ay = -ay; }
+  const a = Math.atan2(ay, ax), m = 0.86;
+  const k = Math.min(m / Math.abs(Math.cos(a) || 1e-6), m / Math.abs(Math.sin(a) || 1e-6));
+  return { x: (Math.cos(a) * k * 0.5 + 0.5) * window.innerWidth, y: (-Math.sin(a) * k * 0.5 + 0.5) * window.innerHeight, a };
+}
+function updateSpawnPointers(dt) {
+  spawnPointers = spawnPointers.filter((p) => (p.t -= dt) > 0 && sim.s.shades.some((x) => x.id === p.id));
+  let n = 0;
+  for (const p of spawnPointers) {
+    const sh = sim.s.shades.find((x) => x.id === p.id);
+    const e = edgeArrow(sh.pos[0], sh.pos[1], sh.pos[2]);
+    if (!e) continue;
+    let el = ptrPool[n];
+    if (!el) { el = document.createElement('div'); el.className = 'ptr'; el.innerHTML = '<div>➤</div>'; $('ptrs').appendChild(el); ptrPool.push(el); }
+    el.style.display = ''; el.style.left = e.x + 'px'; el.style.top = e.y + 'px';
+    el.firstChild.style.transform = `rotate(${-e.a}rad)`;
+    el.style.opacity = Math.min(1, p.t);
+    n++;
+  }
+  for (let i = n; i < ptrPool.length; i++) ptrPool[i].style.display = 'none';
+}
 function toast(text, bad = false) {
   const el = $('toast');
   el.textContent = text;
@@ -267,6 +405,8 @@ function updateHud(dt) {
   $('timer').textContent = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
   $('timer').classList.toggle('danger', sec <= 30);
   if (mode === 'play' && sec <= 10 && sec !== lastSec && sec > 0) audio.tick();
+  if (mode === 'play' && sec === 10 && sec !== lastSec) caption('10 giây cuối tới bình minh', 'time');
+  $('timer').classList.toggle('final', sec <= 10);
   lastSec = sec;
   const lit = s.lanterns.filter((l) => l.lit).length, need = litNeeded(s.lanterns.length);
   $('lanterns').textContent = `${lit}/${s.lanterns.length}`;
@@ -304,7 +444,7 @@ function updateHud(dt) {
   }
   // cảnh báo đèn sắp cạn dầu (< 30)
   for (const l of s.lanterns) {
-    if (l.lit && l.fuel < LOW_U && !lowWarned.has(l.id) && mode === 'play') { lowWarned.add(l.id); toast(`Đèn ${l.id} sắp cạn dầu, mất vùng an toàn!`, true); }
+    if (l.lit && l.fuel < LOW_U && !lowWarned.has(l.id) && mode === 'play') { lowWarned.add(l.id); toast(`Đèn ${l.id} sắp cạn dầu, mất vùng an toàn!`, true); caption(`Đèn ${l.id} dưới 30 dầu`, 'fuel'); }
     if (!l.lit || l.fuel >= LOW_U) lowWarned.delete(l.id);
   }
   // mũi tên chỉ tới đèn chưa sáng gần nhất khi ngoài màn hình
@@ -372,8 +512,8 @@ function handleEvents(events) {
         if (!drainWarned.has(e.data.shade_id)) { drainWarned.add(e.data.shade_id); toast(`Bóng Mực đang hút dầu đèn ${e.data.lantern_id}! Tỏa Sáng để đuổi`, true); }
         break;
       case 'pulse': stats.stuns += e.data.stunned_ids.length; fx.pulse(P.pos); audio.pulse(); break;
-      case 'player_hit': audio.hit(); shake = 1; flash(); if (e.data.by === 'fall') toast('Mây rơi xuống biển mây…', true); break;
-      case 'shade_spawned': audio.spawn(); if (mode === 'play') toast('Bóng Mực trồi lên từ sương', true); break;
+      case 'player_hit': audio.hit(); if (!reduceMotion) { shake = 1; flash(); } caption('Mây bị chạm!', 'hit'); if (e.data.by === 'fall') toast('Mây rơi xuống biển mây…', true); break;
+      case 'shade_spawned': { audio.spawn(); caption('Bóng Mực xuất hiện', 'shade'); const sh = sim.s.shades.find((x) => x.id === e.data.id); if (sh) spawnPointers.push({ id: sh.id, t: 5 }); break; }
       case 'dash': audio.dash(); break;
       case 'charm_picked': audio.charm(); fx.burst([P.pos[0], P.pos[1] + 1.2, P.pos[2]], 0xff6a5a, 24, 3); toast('Bùa Gió: chạy nhanh hơn, lướt không cần hồi chiêu'); break;
       case 'drifter_steal': audio.steal(); toast(`Gió Lạc cướp mất ${e.data.amount} đom đóm! Tỏa Sáng để đòi lại`, true); break;
@@ -412,11 +552,13 @@ function showResult() {
   $('resGrid').innerHTML = rows.map(([a, b]) => `<span>${a}</span><b>${b}</b>`).join('');
   $('btnAgain').textContent = won ? `Sang Đêm ${night + 1}` : 'Chơi lại Đêm';
   setMode('result');
+  if (!won) showSaveForm('result'); else $('saveForm').classList.add('hidden');
 }
 function showDawn() {
   $('dawnScore').textContent = run.total;
   $('dawnGrid').innerHTML = run.nights.map((r) => `<span>Đêm ${r.night} · ${NIGHTS[r.night].name}</span><b>${r.score}</b>`).join('');
   setMode('dawn');
+  showSaveForm('dawn');
 }
 
 // ---------- vòng lặp
@@ -427,7 +569,7 @@ const camPos = new THREE.Vector3(0, 12, -14), camLook = new THREE.Vector3(), foc
 let wasGrounded = true;
 let fpsAcc = 0, fpsN = 0, fps = 0;
 
-function frame() {
+function frame(ts = performance.now()) {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.1);
   t += dt;
@@ -439,12 +581,12 @@ function frame() {
     introT += dt;
     if (introT > 3.6) setMode('play');
   }
-  if (mode === 'play') {
+  if (mode === 'play' || mode === 'bench') {
     acc += dt;
     while (acc >= 1 / TPS) {
       prevPos = [...s.player.pos];
       wasGrounded = s.player.grounded;
-      sim.step(readInput());
+      sim.step(mode === 'bench' ? {} : readInput());
       if (wasGrounded && !s.player.grounded && s.player.vel[1] > 5 && !s.player.launch) audio.jump();
       if (s.fx.launches !== lastLaunch) { lastLaunch = s.fx.launches; audio.bounce(); fx.burst([s.player.pos[0], s.player.pos[1] + 0.3, s.player.pos[2]], 0xffd27a, 20, 4); }
       handleEvents(sim.drainEvents());
@@ -483,6 +625,7 @@ function frame() {
     v.update(dt, t, sh, pv);
   }
   for (const [id, v] of shadeViews) if (!alive.has(id)) { v.dispose(); shadeViews.delete(id); }
+  flushShadeSmoke();
   const dAlive = new Set();
   for (const d of s.drifters) {
     dAlive.add(d.id);
@@ -497,14 +640,18 @@ function frame() {
   // gió mạnh: lá bay báo trước 2 s, rồi gió thổi 5 s
   const w = s.wind;
   const warn = w.enabled && !w.active && w.next - s.sim <= C.wind_warn_ticks && w.next - s.sim > 0;
-  if (warn && !windWarned && mode === 'play') { windWarned = true; toast('Lá bắt đầu bay… gió mạnh sắp nổi!', true); audio.wind(); }
+  if (warn && !windWarned && mode === 'play') { windWarned = true; toast('Lá bắt đầu bay… gió mạnh sắp nổi!', true); caption('Gió sắp thổi', 'wind'); audio.wind(); }
   if (w.active && !windWas) windWarned = false;
   windWas = w.active;
   const windDir = w.active ? w.dir : (w.nextDir ?? 0);
   windFx.update(dt, t, pv, windDir, w.active ? 1 : warn ? 0.45 : 0);
 
   // camera
-  if (mode === 'title' || mode === 'loading') {
+  if (mode === 'bench') {
+    const [cx, cy, cz] = benchCamera(bench.started ? (ts - bench.started) / 1000 : 0);
+    camera.position.set(cx, cy, cz);
+    camera.lookAt(0, 0, 0);
+  } else if (mode === 'title' || mode === 'loading') {
     const a = t * 0.045;
     const cx = world.uniforms.uCenter.value.x;
     camPos.set(cx + Math.cos(a) * 62, 18 + Math.sin(t * 0.2) * 3, Math.sin(a) * 62);
@@ -541,18 +688,66 @@ function frame() {
     if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake * 0.5, (Math.random() - 0.5) * shake * 0.5, 0));
     camera.lookAt(camLook);
   }
-  if (mode !== 'title' && mode !== 'loading') updateHud(dt);
+  if (!['title', 'loading', 'bench'].includes(mode)) { updateHud(dt); updateSpawnPointers(dt); }
   composer.render();
+  if (mode === 'bench') benchTick(ts);
 }
 
-newSim(1, true);
-setMode('loading');
-requestAnimationFrame(frame);
-setTimeout(() => {
-  $('loading').style.opacity = '0';
-  setTimeout(() => $('loading').remove(), 800);
-  setMode('title');
-}, 600);
+// ---------- benchmark (Ticket-04): ?bench=1&seed=42&duration=30
+// Không input, Đêm 1, 200 Bóng Mực, 100 đom đóm, L1–L3 sáng; tắt phần trang trí sáng tạo; 3 s khởi động rồi đo.
+const bench = { started: 0, warm: BENCH.warmup_s * 1000, dur: (+params.get('duration') || 30) * 1000, last: 0, dts: [], first: 0, done: false };
+function startBench() {
+  const seed = +params.get('seed') || 42;
+  night = 1;
+  buildNightViews(1);
+  world.setCreative(false);
+  sim = createSim({ seed, night: 1, scenario: benchScenario(seed), bench: true });
+  sim.drainEvents();
+  prevPos = [...sim.s.player.pos];
+  world.setDayNow(0);
+  $('loading')?.remove();
+  for (const id of SCREENS) $(id).classList.add('hidden');
+  $('hud').classList.add('hidden');
+  mode = 'bench';
+}
+function benchTick(ts) {
+  if (bench.done) return;
+  if (!bench.started) { bench.started = ts; bench.first = performance.timeOrigin + ts; bench.last = ts; return; }
+  const el = ts - bench.started;
+  if (el > bench.warm) {
+    bench.dts.push(ts - bench.last);
+    const heap = performance.memory?.usedJSHeapSize;
+    if (heap) bench.heap = Math.max(bench.heap ?? 0, heap);
+  }
+  bench.last = ts;
+  if (el >= bench.warm + bench.dur) {
+    bench.done = true;
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    window.__benchResult = {
+      dts: bench.dts, first_frame_epoch_ms: bench.first,
+      gpu: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+      size: [renderer.domElement.width, renderer.domElement.height], dpr: renderer.getPixelRatio(),
+      shades: sim.s.shades.length, motes: sim.s.motes.length,
+      js_heap_peak_mb: bench.heap ? Math.round(bench.heap / 1048576) : null,
+    };
+    if (params.get('report') === '1') fetch('/api/bench', { method: 'POST', body: JSON.stringify(window.__benchResult) }).catch(() => {});
+  }
+}
+
+if (BENCH_MODE) {
+  startBench();
+  requestAnimationFrame(frame);
+} else {
+  newSim(1, true);
+  setMode('loading');
+  requestAnimationFrame(frame);
+  setTimeout(() => {
+    $('loading').style.opacity = '0';
+    setTimeout(() => $('loading').remove(), 800);
+    setMode('title');
+  }, 600);
+}
 
 // cho phép kiểm tra nhanh trong console (đo FPS, nhảy Đêm)
-window.__ddl = { get sim() { return sim; }, get mode() { return mode; }, get fps() { return fps; }, setMode, startNight, world };
+window.__ddl = { get sim() { return sim; }, get mode() { return mode; }, get fps() { return fps; }, get info() { return { ...renderer.info.render, programs: renderer.info.programs?.length, geometries: renderer.info.memory.geometries }; }, setMode, startNight, world };

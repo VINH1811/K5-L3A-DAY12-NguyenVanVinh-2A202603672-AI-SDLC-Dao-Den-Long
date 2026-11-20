@@ -21,7 +21,7 @@ kbd { display: inline-block; min-width: 1.7em; padding: 2px 7px; margin: 0 2px; 
 
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
-#hud .label { font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.7; margin-top: 4px; }
+#hud .label { font-size: 18px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.7; margin-top: 4px; }
 .tl { position: absolute; top: 22px; left: 26px; }
 .flames { display: flex; gap: 10px; }
 .flame { width: 30px; height: 40px; position: relative; transition: transform 0.3s, opacity 0.3s, filter 0.3s; }
@@ -39,7 +39,7 @@ kbd { display: inline-block; min-width: 1.7em; padding: 2px 7px; margin: 0 2px; 
 .tr { position: absolute; top: 22px; right: 26px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .stat { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 600; }
 .stat.score { color: var(--gold); font-family: 'Cormorant Garamond', serif; font-size: 34px; }
-.stat.score small { font-family: 'Be Vietnam Pro'; font-size: 13px; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.7; color: var(--text); }
+.stat.score small { font-family: 'Be Vietnam Pro'; font-size: 18px; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.7; color: var(--text); }
 .lantern-ico { width: 22px; height: 30px; border-radius: 45% 45% 40% 40%; background: radial-gradient(circle at 50% 55%, #ffe9b0, #ffb347 55%, #c2541f); box-shadow: 0 0 14px #ffb347; position: relative; }
 .lantern-ico::before, .lantern-ico::after { content: ''; position: absolute; left: 4px; right: 4px; height: 4px; background: #3c2a1c; border-radius: 2px; }
 .lantern-ico::before { top: -2px; } .lantern-ico::after { bottom: -2px; }
@@ -58,7 +58,7 @@ kbd { display: inline-block; min-width: 1.7em; padding: 2px 7px; margin: 0 2px; 
 .cd .bg { stroke: rgba(245, 241, 230, 0.15); fill: var(--glass); }
 .cd .fg { stroke: var(--gold); stroke-dasharray: 106.8; stroke-dashoffset: 0; stroke-linecap: round; transition: stroke-dashoffset 0.08s linear; }
 .cd span { font-weight: 700; font-size: 20px; z-index: 1; }
-.cd small { position: absolute; bottom: -20px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; white-space: nowrap; }
+.cd small { position: absolute; bottom: -20px; font-size: 18px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; white-space: nowrap; }
 .cd.cooling span { opacity: 0.4; }
 .cd.ready { filter: drop-shadow(0 0 6px rgba(242, 193, 78, 0.7)); }
 .cd.nofuel span { color: var(--danger); }
@@ -73,13 +73,13 @@ kbd { display: inline-block; min-width: 1.7em; padding: 2px 7px; margin: 0 2px; 
 .screen { position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; padding: 16px; }
 #title { background: linear-gradient(90deg, rgba(8, 10, 28, 0.82) 0%, rgba(8, 10, 28, 0.35) 55%, transparent 100%); justify-items: start; padding-left: clamp(16px, 8vw, 140px); }
 .title-card { max-width: 640px; animation: rise 1.4s cubic-bezier(.2, .8, .2, 1) both; }
-.eyebrow { font-size: 13px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--gold); opacity: 0.9; }
+.eyebrow { font-size: 18px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--gold); opacity: 0.9; }
 h1 { white-space: nowrap; font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: clamp(56px, 9vw, 104px); line-height: 0.95; margin: 14px 0 18px; background: linear-gradient(180deg, #fff6c2 0%, #ffb347 60%, #e0772c 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 28px rgba(255, 179, 71, 0.35)); }
 h2 { font-family: 'Cormorant Garamond', serif; font-size: 52px; margin: 8px 0 14px; color: var(--core); }
 .lore { font-size: 18px; line-height: 1.65; opacity: 0.9; margin: 0 0 28px; }
 .lore b { color: var(--warm); font-weight: 600; }
 .lore b.danger { color: #b48bff; }
-.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; margin-top: 34px; font-size: 15px; opacity: 0.78; }
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; margin-top: 34px; font-size: 18px; opacity: 0.78; }
 .btn { pointer-events: auto; display: block; width: 100%; max-width: 320px; margin: 10px 0; padding: 14px 22px; border-radius: 999px; border: 1px solid var(--line); background: rgba(245, 241, 230, 0.06); color: var(--text); font: 600 18px 'Be Vietnam Pro', sans-serif; cursor: pointer; transition: all 0.25s; }
 .btn:hover { background: rgba(245, 241, 230, 0.14); transform: translateY(-1px); }
 .btn.primary { background: linear-gradient(180deg, #ffcf7a, #ff9f3a); border-color: transparent; color: #2a1606; box-shadow: 0 8px 32px rgba(255, 159, 58, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
@@ -90,16 +90,16 @@ h2 { font-family: 'Cormorant Garamond', serif; font-size: 52px; margin: 8px 0 14
 .intro-card { text-align: center; max-width: 640px; animation: rise 1s cubic-bezier(.2, .8, .2, 1) both; }
 .intro-card h2 { font-size: 76px; margin: 4px 0 18px; }
 .quote { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 26px; line-height: 1.45; opacity: 0.92; }
-.who { margin-top: 10px; color: var(--gold); font-size: 15px; letter-spacing: 0.08em; }
+.who { margin-top: 10px; color: var(--gold); font-size: 18px; letter-spacing: 0.08em; }
 
 .panel { width: min(440px, 100%); padding: 34px 36px; border-radius: 22px; background: rgba(14, 20, 48, 0.78); border: 1px solid var(--line); backdrop-filter: blur(14px); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; align-items: center; text-align: center; animation: rise 0.5s cubic-bezier(.2, .8, .2, 1) both; }
 .panel .btn { max-width: none; }
 #pause, #result { background: rgba(5, 6, 18, 0.45); }
-.slider { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 10px 0; font-size: 15px; opacity: 0.85; }
+.slider { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 10px 0; font-size: 18px; opacity: 0.85; }
 .slider input { accent-color: var(--gold); width: 55%; }
 .big-score { font-family: 'Cormorant Garamond', serif; font-size: 72px; font-weight: 700; color: var(--gold); line-height: 1; margin: 8px 0 14px; }
-.big-score small { font-family: 'Be Vietnam Pro'; font-size: 14px; letter-spacing: 0.2em; margin-left: 8px; color: var(--text); opacity: 0.6; text-transform: uppercase; }
-.res-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 22px; width: 100%; font-size: 15px; margin-bottom: 16px; opacity: 0.85; text-align: left; }
+.big-score small { font-family: 'Be Vietnam Pro'; font-size: 18px; letter-spacing: 0.2em; margin-left: 8px; color: var(--text); opacity: 0.6; text-transform: uppercase; }
+.res-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 22px; width: 100%; font-size: 18px; margin-bottom: 16px; opacity: 0.85; text-align: left; }
 .res-grid b { text-align: right; color: var(--core); }
 .result.lost h2 { color: #c9a6ff; }
 .result.lost .eyebrow { color: #b48bff; }
@@ -117,23 +117,61 @@ h2 { font-family: 'Cormorant Garamond', serif; font-size: 52px; margin: 8px 0 14
 /* ---- Phase 2: chọn Đêm, Bùa Gió, Bình Minh */
 .nights { display: flex; gap: 10px; justify-content: center; margin: 14px 0 6px; flex-wrap: wrap; }
 .chip { cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 112px; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 20, 48, 0.55); color: var(--text); font: inherit; transition: transform 0.15s, border-color 0.15s, background 0.15s; }
-.chip b { font-size: 14px; color: var(--gold); letter-spacing: 0.04em; }
+.chip b { font-size: 18px; color: var(--gold); letter-spacing: 0.04em; }
 .chip span { font-family: 'Cormorant Garamond', serif; font-size: 19px; font-style: italic; }
 .chip:hover { transform: translateY(-2px); border-color: var(--gold); background: rgba(40, 32, 60, 0.7); }
-.charm { position: absolute; bottom: 104px; right: 30px; display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 12px; background: rgba(200, 16, 46, 0.22); border: 1px solid #c8102e; color: var(--text); font-size: 14px; }
+.charm { position: absolute; bottom: 104px; right: 30px; display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 12px; background: rgba(200, 16, 46, 0.22); border: 1px solid #c8102e; color: var(--text); font-size: 18px; }
 .charm b { color: var(--gold); font-variant-numeric: tabular-nums; }
 .charm-ico { width: 12px; height: 20px; border-radius: 2px; background: #c8102e; box-shadow: inset 0 0 0 2px #f2c14e; }
 .dawn-card { background: rgba(255, 236, 214, 0.16); border-color: rgba(255, 210, 160, 0.5); }
 .dawn-card .eyebrow { color: #ffd9a8; }
 
 /* ---- Phase 3: đèn cạn dầu, mù màu */
-.tr .need { font-size: 13px; opacity: 0.75; text-align: right; margin-top: 2px; }
+.tr .need { font-size: 18px; opacity: 0.75; text-align: right; margin-top: 2px; }
 .tr .need.danger { color: var(--danger); opacity: 1; }
 .motes .mote.hidden { display: none; }
-.toggle { display: flex; align-items: center; gap: 10px; align-self: stretch; margin: 6px 0 10px; font-size: 16px; cursor: pointer; }
+.toggle { display: flex; align-items: center; gap: 10px; align-self: stretch; margin: 6px 0 10px; font-size: 18px; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--gold); }
 /* Bảng màu dễ phân biệt: cảnh báo UI dùng trắng + ⚠ thay cho đỏ */
 body.cb { --danger: #ffffff; --ink: #00b3ff; }
 body.cb .timer.danger::before, body.cb .toast.bad::before, body.cb .tr .need.danger::before { content: '⚠ '; }
 body.cb .toast.bad { color: #ffffff; }
 body.cb b.danger { color: #00b3ff; }
+
+/* ---- Phase 4: bảng xếp hạng, cài đặt, phụ đề, chữ lớn */
+.menu-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 12px 0 4px; }
+.btn.small { width: auto; padding: 10px 18px; font-size: 18px; }
+.save-form { width: 100%; margin: 6px 0 14px; text-align: left; }
+.save-form label { display: block; font-size: 18px; margin-bottom: 6px; color: var(--gold); }
+.save-row { display: flex; gap: 8px; }
+.save-row input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(5, 8, 22, 0.6); color: var(--text); font: 18px 'Be Vietnam Pro', sans-serif; }
+.save-msg { min-height: 1.4em; margin-top: 6px; font-size: 18px; }
+.save-msg.bad, .keys-msg.bad { color: var(--danger); }
+.board-card { width: min(520px, 100%); }
+.board-list { list-style: none; padding: 0; margin: 4px 0 10px; width: 100%; }
+.board-list li { display: grid; grid-template-columns: 2em 1fr auto auto; gap: 12px; align-items: baseline; padding: 7px 4px; border-bottom: 1px solid rgba(242, 193, 78, 0.15); font-size: 18px; text-align: left; }
+.board-list li b { color: var(--gold); }
+.board-list li .sc { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 700; color: var(--gold); }
+.board-list li .nw { opacity: 0.7; }
+.board-list li.muted { display: block; opacity: 0.7; text-align: center; border: 0; }
+.board-note { font-size: 18px; opacity: 0.6; margin-bottom: 10px; }
+.settings-card { width: min(560px, 100%); max-height: 92vh; overflow-y: auto; }
+.keys-head { align-self: stretch; text-align: left; margin: 12px 0 6px; color: var(--gold); font-size: 18px; }
+.keys-head span { color: var(--text); opacity: 0.6; margin-left: 6px; }
+.keys { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; align-self: stretch; align-items: center; text-align: left; font-size: 18px; }
+.keybtn { min-width: 120px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: rgba(245, 241, 230, 0.06); color: var(--text); font: 600 18px 'Be Vietnam Pro', sans-serif; cursor: pointer; }
+.keybtn:hover { border-color: var(--gold); }
+.keybtn.wait { border-color: var(--gold); background: rgba(242, 193, 78, 0.18); animation: blink 1s infinite; }
+.keybtn.dup { border-color: var(--danger); color: var(--danger); }
+.keys-msg { min-height: 1.4em; margin: 8px 0; font-size: 18px; align-self: stretch; text-align: left; }
+.subs { position: absolute; left: 30px; bottom: 120px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
+.sub { padding: 6px 12px; border-radius: 10px; background: rgba(5, 8, 22, 0.72); border: 1px solid var(--line); font-size: 18px; transition: opacity 0.5s; }
+.sub i { font-style: normal; margin-right: 8px; }
+.sub.out { opacity: 0; }
+.sub-shade { border-color: var(--ink); }
+.sub-fuel, .sub-time { border-color: var(--danger); }
+.ptr { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+.ptr div { font-size: 30px; color: var(--ink); filter: drop-shadow(0 0 10px var(--ink)); }
+.timer.final { font-size: 56px; }
+/* Chữ lớn ×1.25 cho toàn bộ giao diện */
+body.large #hud, body.large .screen { zoom: 1.25; }
