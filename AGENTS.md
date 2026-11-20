@@ -3,7 +3,7 @@
 ## Lệnh
 - Cài: `npm ci` · Chạy game: `npm start` · Build tĩnh: `npm run build`
 - Test (bắt buộc xanh trước khi kết thúc việc): `npm test`
-- Headless: `node tools/headless.mjs --seed 1 --night 1|2|3 --ticks 600 --out out/x.jsonl` (Contract v1.1)
+- Headless: `node tools/headless.mjs --seed 1 --night 1|2|3 --ticks 600 --out out/x.jsonl` (Contract v1.2)
 
 ## Kiến trúc
 - `src/sim/` là lõi logic thuần, tất định. Không import DOM, Three.js, `Math.random`, `Date`. Ngẫu nhiên chỉ qua `makeRng(seed)`.
