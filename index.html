@@ -26,12 +26,13 @@
     </div>
     <div class="tr">
       <div class="stat"><span class="ico lantern-ico"></span><span id="lanterns">0/5</span></div>
+      <div class="need" id="lanternsNeed">cần 3 lúc bình minh</div>
       <div class="stat score"><span id="score">0</span><small>điểm</small></div>
     </div>
     <div class="bc">
-      <div class="prompt hidden" id="prompt"><kbd>E</kbd> Nạp ánh sáng <span id="promptN">(0/10)</span></div>
+      <div class="prompt hidden" id="prompt"><kbd>E</kbd> <span id="promptVerb">Nạp ánh sáng</span> <span id="promptN">(0/10)</span></div>
       <div class="motes" id="motes"></div>
-      <div class="label">Đom đóm</div>
+      <div class="label" id="motesLabel">Đom đóm</div>
     </div>
     <div class="charm hidden" id="charm"><span class="charm-ico"></span>Bùa Gió <b id="charmT">10s</b></div>
     <div class="br">
@@ -47,7 +48,7 @@
     <div class="title-card">
       <div class="eyebrow">Một câu chuyện cổ tích giữa biển mây</div>
       <h1>Đảo Đèn Lồng</h1>
-      <p class="lore">Sương đen đã nuốt ánh sáng của ba hòn đảo. Mây, người giữ đèn nhỏ tuổi, phải gom đom đóm, thắp lại các <b>Đèn Lồng Lớn</b> qua ba Đêm, và tránh xa lũ <b class="danger">Bóng Mực</b> trong sương cho tới bình minh.</p>
+      <p class="lore">Sương đen đã nuốt ánh sáng của ba hòn đảo. Mây, người giữ đèn nhỏ tuổi, phải gom đom đóm, thắp lại các <b>Đèn Lồng Lớn</b> qua ba Đêm, giữ dầu cho đèn không tắt, và tránh xa lũ <b class="danger">Bóng Mực</b> hút dầu trong sương cho tới bình minh.</p>
       <button class="btn primary" id="btnStart">Bắt đầu hành trình</button>
       <div class="nights">
         <button class="chip" data-night="1"><b>Đêm 1</b><span>Đảo Bến</span></button>
@@ -85,6 +86,7 @@
       <button class="btn" id="btnRestart">Chơi lại Đêm</button>
       <label class="slider">Âm lượng <input type="range" id="vol" min="0" max="1" step="0.05" /></label>
       <label class="slider">Độ nhạy chuột <input type="range" id="sens" min="0.3" max="2.5" step="0.1" /></label>
+      <label class="toggle"><input type="checkbox" id="cb" /> Bảng màu dễ phân biệt</label>
       <button class="btn ghost" id="btnMenu">Về menu</button>
     </div>
   </div>

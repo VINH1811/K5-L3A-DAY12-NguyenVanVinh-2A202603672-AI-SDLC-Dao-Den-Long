@@ -1,7 +1,12 @@
 // Mô hình nhân vật & thực thể: Mây, Đèn Lồng Lớn, Bóng Mực, đom đóm, hiệu ứng.
 import * as THREE from 'three';
 import { PAL, softTexture } from './world.js';
-import { TUNING } from '../sim/config.js';
+import { TUNING, FUEL_UNIT } from '../sim/config.js';
+
+// Bảng màu dễ phân biệt (mù màu): Bóng Mực viền/mắt #00B3FF. Bật/tắt từ main.js.
+export const ACCESS = { colorblind: false };
+const RIM_NORMAL = new THREE.Color(PAL.shadeRim), RIM_CB = new THREE.Color(0x00b3ff);
+const FUEL_MAX_U = TUNING.fuel_max * FUEL_UNIT, FUEL_LOW_U = TUNING.low_fuel_threshold * FUEL_UNIT;
 
 const glowTex = () => (glowTex.t ??= softTexture('rgba(255,236,190,1)'));
 
@@ -234,6 +239,20 @@ export function makeLantern(scene, L, center = [0, 0]) {
   const paper = new THREE.Mesh(new THREE.LatheGeometry(prof, 24), paperMat);
   paper.position.y = -0.33;
   hang.add(paper);
+  // đèn tắt: giấy rách (nhận ra được không cần màu)
+  const tear = new THREE.Group();
+  const tearMat = new THREE.MeshBasicMaterial({ color: 0x0b0710, side: THREE.DoubleSide });
+  for (const [a, y, sx, sy] of [[0.3, -0.75, 0.22, 0.34], [2.4, -1.05, 0.16, 0.26], [4.2, -0.6, 0.12, 0.2]]) {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, sy); shape.lineTo(sx * 0.4, sy * 0.3); shape.lineTo(sx, sy * 0.1); shape.lineTo(sx * 0.35, -sy * 0.2);
+    shape.lineTo(sx * 0.5, -sy); shape.lineTo(-sx * 0.1, -sy * 0.35); shape.lineTo(-sx, -sy * 0.5); shape.lineTo(-sx * 0.3, sy * 0.2);
+    const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), tearMat);
+    const r = 0.28 + Math.sin(((-y - 0.33) / 1.25) * Math.PI) * 0.42 + 0.012;
+    m.position.set(Math.sin(a) * r, y, Math.cos(a) * r);
+    m.rotation.y = a;
+    tear.add(m);
+  }
+  hang.add(tear);
   // gân tre
   for (let k = 0; k < 8; k++) {
     const rib = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.012, 4, 24, Math.PI), new THREE.MeshStandardMaterial({ color: 0x3c2a1c }));
@@ -302,15 +321,44 @@ export function makeLantern(scene, L, center = [0, 0]) {
     deco.push(s);
   }
   for (const m of [base, post, arm, cap]) { m.castShadow = true; m.receiveShadow = true; }
+  // thanh dầu (billboard) phía trên đèn đang sáng
+  const bar = new THREE.Group();
+  bar.position.set(0, 5.35, 0);
+  const barBg = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.2), new THREE.MeshBasicMaterial({ color: 0x0e1430, transparent: true, opacity: 0.75, depthWrite: false }));
+  const fillGeo = new THREE.PlaneGeometry(1.4, 0.12); fillGeo.translate(0.7, 0, 0);
+  const barFill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: PAL.lanternLit, transparent: true, depthWrite: false }));
+  barFill.position.set(-0.7, 0, 0.002);
+  const tick30 = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.22), new THREE.MeshBasicMaterial({ color: 0xf5f1e6, transparent: true, opacity: 0.8, depthWrite: false }));
+  tick30.position.set(-0.7 + 1.4 * (TUNING.low_fuel_threshold / TUNING.fuel_max), 0, 0.004);
+  bar.add(barBg, barFill, tick30);
+  bar.renderOrder = 5;
+  g.add(bar);
   scene.add(g);
 
-  let lit = 0, flash = 0, wasLit = false;
-  function update(dt, t, st) {
+  let lit = 0, flash = 0, wasLit = false, ever = false;
+  const camPos = new THREE.Vector3();
+  function update(dt, t, st, camera) {
     if (st.lit && !wasLit) flash = 1;
     wasLit = st.lit;
     lit += ((st.lit ? 1 : 0) - lit) * Math.min(1, dt * 2.2);
     flash = Math.max(0, flash - dt * 0.8);
-    const flick = 0.92 + 0.05 * Math.sin(t * 9 + L.pos[0]) + 0.03 * Math.sin(t * 23 + L.pos[2]);
+    // dầu yếu (< 30): đèn và thanh dầu nhấp nháy chậm 1 Hz
+    const low = st.lit && st.fuel < FUEL_LOW_U;
+    const blink = low ? 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(t * Math.PI * 2)) : 1;
+    const flick = (0.92 + 0.05 * Math.sin(t * 9 + L.pos[0]) + 0.03 * Math.sin(t * 23 + L.pos[2])) * blink;
+    // đèn tắt bị xẹp 20%, có vết rách
+    const sq = 0.8 + 0.2 * lit;
+    paper.scale.set(1, sq, 1);
+    tear.visible = lit < 0.5;
+    tear.scale.set(1, sq, 1);
+    bar.visible = st.lit;
+    if (st.lit) {
+      const f = Math.max(0, Math.min(1, st.fuel / FUEL_MAX_U));
+      barFill.scale.x = Math.max(0.001, f);
+      barFill.material.color.setHex(low ? (ACCESS.colorblind ? 0xffffff : PAL.danger) : PAL.lanternLit);
+      barFill.material.opacity = low ? blink : 1;
+      if (camera) { camera.getWorldPosition(camPos); bar.lookAt(camPos); }
+    }
     paperMat.color.setHex(PAL.lanternOff).lerp(new THREE.Color(0xd9542b), lit);
     paperMat.emissiveIntensity = lit * 1.15 * flick + flash * 2;
     coreMat.opacity = lit * 0.45;
@@ -319,10 +367,12 @@ export function makeLantern(scene, L, center = [0, 0]) {
     light.intensity = lit * 32 * flick + flash * 80;
     hang.rotation.z = Math.sin(t * 0.9 + L.pos[0]) * 0.04;
     hang.rotation.x = Math.sin(t * 0.7 + L.pos[2]) * 0.03;
-    ringU.uP.value += (st.deposited / TUNING.lantern_cost - ringU.uP.value) * Math.min(1, dt * 8);
+    if (st.everLit) ever = true;
+    const cost = ever ? TUNING.relight_cost : TUNING.lantern_cost;
+    ringU.uP.value += (Math.min(1, st.deposited / cost) - ringU.uP.value) * Math.min(1, dt * 8);
     ringU.uLit.value = lit;
     ringU.uTime.value = t;
-    safeU.uA.value = lit;
+    safeU.uA.value = lit * (st.lit && st.fuel < FUEL_LOW_U ? 0 : 1); // dầu < 30: mất vùng an toàn
     for (const s of deco) {
       const u = s.userData, a = u.a + t * u.sp;
       s.position.set(Math.cos(a) * u.r, u.h + Math.sin(t * 1.3 + u.a) * 0.4, Math.sin(a) * u.r);
@@ -408,6 +458,8 @@ export function makeShade(scene) {
     stun += ((isStun ? 1 : 0) - stun) * Math.min(1, dt * 8);
     born = Math.min(1, born + dt * (sh.state === 'spawning' ? 2 : 4));
     mat.uniforms.uStun.value = stun;
+    mat.uniforms.uRim.value.copy(ACCESS.colorblind ? RIM_CB : RIM_NORMAL);
+    eyeGlow.material.color.copy(ACCESS.colorblind ? RIM_CB : RIM_NORMAL);
     mat.uniforms.uTime.value = t;
     mat.uniforms.uFade.value = born;
     const hover = Math.sin(t * 2.4 + sh.id.length + vis.x) * 0.15;
@@ -421,9 +473,10 @@ export function makeShade(scene) {
     g.rotation.y = yaw + (isStun ? t * 6 : 0);
     last.copy(vis);
     const chase = sh.state === 'chase' ? 1 : 0;
-    g.scale.setScalar(born * (1 + chase * 0.08 + Math.sin(t * 6) * 0.03 * chase));
+    const drain = sh.state === 'drain' ? 1 : 0; // đang hút dầu: phồng xẹp nhanh như đang hút
+    g.scale.setScalar(born * (1 + chase * 0.08 + Math.sin(t * 6) * 0.03 * chase + drain * (0.1 + Math.sin(t * 9) * 0.08)));
     tendrils.forEach((td, i) => { td.rotation.z = Math.sin(t * 4 + i) * 0.35; td.rotation.x = Math.PI + Math.cos(t * 3.4 + i) * 0.25; });
-    eyeMat.color.setHex(isStun ? 0x7a7590 : 0xe6d6ff);
+    eyeMat.color.setHex(isStun ? 0x7a7590 : ACCESS.colorblind ? 0x00b3ff : 0xe6d6ff);
     eyes.forEach((e) => { e.scale.y = isStun ? 0.15 : 0.6; });
     eyeGlow.material.opacity = (isStun ? 0.1 : 0.55 + chase * 0.4) * born;
     stars.forEach((s, i) => {

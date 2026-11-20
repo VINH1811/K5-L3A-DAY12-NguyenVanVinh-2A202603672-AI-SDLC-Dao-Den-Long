@@ -7,7 +7,11 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createSim } from '../sim/sim.js';
 import { TPS, TUNING, C, NIGHTS } from '../sim/config.js';
 import { buildWorld, groundAt } from './world.js';
-import { makePlayer, makeLantern, makeShade, makeMotes, makeFx, makeDrifter, makeCharm, makeWindFx } from './actors.js';
+import { makePlayer, makeLantern, makeShade, makeMotes, makeFx, makeDrifter, makeCharm, makeWindFx, ACCESS } from './actors.js';
+import { FUEL_UNIT } from '../sim/config.js';
+
+const LOW_U = TUNING.low_fuel_threshold * FUEL_UNIT, MAX_U = TUNING.fuel_max * FUEL_UNIT;
+const litNeeded = (n) => Math.ceil(TUNING.win_ratio * n);
 import { makeAudio } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -56,7 +60,7 @@ const windFx = makeWindFx(scene);
 let run = { total: 0, nights: [] }; // tổng điểm các Đêm đã thắng
 
 const QUOTES = {
-  1: '“Mây ơi, năm ngọn đèn quanh bến đã tắt cả rồi. Gom đom đóm, mười đốm cho mỗi đèn. Lũ Bóng Mực sợ ánh lửa: đứng gần đèn sáng là an toàn.”',
+  1: '“Mây ơi, năm ngọn đèn quanh bến đã tắt cả rồi. Mười đốm đom đóm thắp một đèn, nhưng đèn sẽ cạn dầu: nhớ quay lại châm thêm. Giữ ít nhất ba ngọn sáng tới bình minh nhé.”',
   2: '“Đảo Cau là hai hòn nối nhau bằng cây cầu tre không tay vịn, bước cho vững. Bục đá phù văn sẽ bắn con sang đảo bên kia. Coi chừng Gió Lạc: chúng thích cướp đom đóm của ai mang nhiều.”',
   3: '“Ngọn đèn cao nhất đứng cạnh tháp chuông. Lên tầng bằng hai con dốc, hoặc nhờ bục nhảy. Gió mạnh thổi từng cơn; thấy lá bay là sắp có gió, con nhé.”',
 };
@@ -92,8 +96,9 @@ function newSim(n, backdrop = false) {
   });
   sim.drainEvents();
   prevPos = [...sim.s.player.pos];
-  stats = { motes: 0, lit: 0, stuns: 0 };
+  stats = { motes: 0, lit: 0, relit: 0, stuns: 0 };
   lastLaunch = 0; windWarned = false;
+  lowWarned = new Set(); drainWarned = new Set();
   $('nightName').textContent = `Đêm ${n} · ${NIGHTS[n].name}`;
 }
 
@@ -149,6 +154,18 @@ function readInput() {
   return { move: [x, z], cam_yaw_deg: (camYaw * 180) / Math.PI, ...btn };
 }
 
+// Đèn mà phím E sẽ tác động: giống luật sim (chưa sáng, hoặc sáng mà chưa đầy dầu và đang mang đom đóm).
+function refuelNeed(l) { return Math.ceil((MAX_U - l.fuel) / (TUNING.fuel_per_mote * FUEL_UNIT)); }
+function interactTarget() {
+  const P = sim.s.player;
+  let best = null, bd = Infinity;
+  for (const l of sim.s.lanterns) {
+    if (l.lit && Math.min(P.carried, refuelNeed(l)) === 0) continue;
+    const d = Math.hypot(P.pos[0] - l.pos[0], P.pos[2] - l.pos[2]);
+    if (d <= TUNING.interact_radius && (d < bd || (d === bd && l.id < best.id))) { best = l; bd = d; }
+  }
+  return best;
+}
 // Phản hồi khi bấm E mà không nạp được (chỉ hiển thị, không đổi luật).
 function nearestUnlit() {
   const P = sim.s.player;
@@ -161,6 +178,10 @@ function nearestUnlit() {
   return { l: best, d: bd };
 }
 function interactHint() {
+  if (interactTarget()) return;
+  const P = sim.s.player;
+  const litNear = sim.s.lanterns.find((x) => x.lit && Math.hypot(P.pos[0] - x.pos[0], P.pos[2] - x.pos[2]) <= TUNING.interact_radius);
+  if (litNear) { toast(P.carried === 0 ? 'Cần đom đóm để châm dầu' : 'Đèn đã đầy dầu'); return; }
   const { l, d } = nearestUnlit();
   if (!l) return;
   if (d > TUNING.interact_radius) {
@@ -210,11 +231,20 @@ $('vol').value = store.get('vol', 0.8);
 $('vol').oninput = (e) => { audio.setVolume(+e.target.value); store.set('vol', +e.target.value); };
 $('sens').value = sens;
 $('sens').oninput = (e) => { sens = +e.target.value; store.set('sens', sens); };
+// Bảng màu dễ phân biệt (được lưu)
+function setColorblind(on) {
+  ACCESS.colorblind = on;
+  document.body.classList.toggle('cb', on);
+  $('cb').checked = on;
+  store.set('cb', on);
+}
+$('cb').onchange = (e) => setColorblind(e.target.checked);
+setColorblind(!!store.get('cb', false));
 
 // ---------- HUD
 const flamesEl = $('flames'), motesEl = $('motes');
 for (let i = 0; i < TUNING.flames; i++) flamesEl.appendChild(Object.assign(document.createElement('div'), { className: 'flame' }));
-for (let i = 0; i < TUNING.carry_capacity; i++) motesEl.appendChild(Object.assign(document.createElement('div'), { className: 'mote' }));
+for (let i = 0; i < TUNING.capacity_max; i++) motesEl.appendChild(Object.assign(document.createElement('div'), { className: 'mote' }));
 let toastTimer = 0;
 function toast(text, bad = false) {
   const el = $('toast');
@@ -238,24 +268,45 @@ function updateHud(dt) {
   $('timer').classList.toggle('danger', sec <= 30);
   if (mode === 'play' && sec <= 10 && sec !== lastSec && sec > 0) audio.tick();
   lastSec = sec;
-  const lit = s.lanterns.filter((l) => l.lit).length;
+  const lit = s.lanterns.filter((l) => l.lit).length, need = litNeeded(s.lanterns.length);
   $('lanterns').textContent = `${lit}/${s.lanterns.length}`;
+  $('lanternsNeed').textContent = `cần ${need} lúc bình minh`;
+  $('lanternsNeed').classList.toggle('danger', lit < need && sec <= 60);
   $('score').textContent = run.total + s.score;
-  [...motesEl.children].forEach((m, i) => m.classList.toggle('on', i < P.carried));
+  const cap = Math.min(TUNING.capacity_max, TUNING.carry_capacity + C.capacity_per_light * P.lights);
+  [...motesEl.children].forEach((m, i) => { m.classList.toggle('on', i < P.carried); m.classList.toggle('hidden', i >= cap); });
+  $('motesLabel').textContent = `Đom đóm ${P.carried}/${cap}`;
   setCd($('cdDash'), P.charm > 0 ? 0 : P.dashCd / C.dash_cd_ticks, true);
   setCd($('cdPulse'), P.pulseCd / C.pulse_cd_ticks, P.carried >= TUNING.pulse_cost);
   const charm = $('charm');
   charm.classList.toggle('hidden', P.charm <= 0);
   if (P.charm > 0) $('charmT').textContent = `${Math.ceil(P.charm / TPS)}s`;
-  // nhắc nạp đèn
-  let near = null, nd = Infinity;
-  for (const l of s.lanterns) {
-    if (l.lit) continue;
-    const d = Math.hypot(P.pos[0] - l.pos[0], P.pos[2] - l.pos[2]);
-    if (d <= TUNING.interact_radius && d < nd) { near = l; nd = d; }
+  // nhắc nạp đèn / châm dầu
+  let near = interactTarget();
+  if (!near) {
+    let nd = Infinity;
+    for (const l of s.lanterns) {
+      if (l.lit) continue;
+      const d = Math.hypot(P.pos[0] - l.pos[0], P.pos[2] - l.pos[2]);
+      if (d <= TUNING.interact_radius && d < nd) { near = l; nd = d; }
+    }
   }
   $('prompt').classList.toggle('hidden', !near);
-  if (near) $('promptN').textContent = P.carried > 0 ? `(${near.deposited}/${TUNING.lantern_cost})` : `(${near.deposited}/${TUNING.lantern_cost}): cần đom đóm`;
+  if (near) {
+    if (near.lit) {
+      $('promptVerb').textContent = 'Châm dầu';
+      $('promptN').textContent = `(${Math.floor(near.fuel / FUEL_UNIT)}/${TUNING.fuel_max}, dùng ${Math.min(P.carried, refuelNeed(near))})`;
+    } else {
+      const cost = near.everLit ? TUNING.relight_cost : TUNING.lantern_cost;
+      $('promptVerb').textContent = near.everLit ? 'Thắp lại' : 'Nạp ánh sáng';
+      $('promptN').textContent = P.carried > 0 ? `(${near.deposited}/${cost})` : `(${near.deposited}/${cost}): cần đom đóm`;
+    }
+  }
+  // cảnh báo đèn sắp cạn dầu (< 30)
+  for (const l of s.lanterns) {
+    if (l.lit && l.fuel < LOW_U && !lowWarned.has(l.id) && mode === 'play') { lowWarned.add(l.id); toast(`Đèn ${l.id} sắp cạn dầu, mất vùng an toàn!`, true); }
+    if (!l.lit || l.fuel >= LOW_U) lowWarned.delete(l.id);
+  }
   // mũi tên chỉ tới đèn chưa sáng gần nhất khi ngoài màn hình
   const { l: target } = nearestUnlit();
   const arrow = $('arrow');
@@ -279,8 +330,9 @@ function updateHud(dt) {
 }
 
 // ---------- sự kiện sim → hình & tiếng
-let stats = { motes: 0, lit: 0, stuns: 0 };
+let stats = { motes: 0, lit: 0, relit: 0, stuns: 0 };
 let shake = 0, lastLaunch = 0, windWarned = false, windWas = false;
+let lowWarned = new Set(), drainWarned = new Set();
 function handleEvents(events) {
   const P = sim.s.player;
   for (const e of events) {
@@ -293,14 +345,32 @@ function handleEvents(events) {
         break;
       }
       case 'lantern_lit': {
-        stats.lit++; audio.lit();
+        if (e.data.relight) stats.relit++; else stats.lit++;
+        audio.lit();
         if (night === 3) audio.bell();
         const l = sim.s.lanterns.find((x) => x.id === e.data.lantern_id);
         fx.burst([l.pos[0], l.pos[1] + 3.2, l.pos[2]], 0xffb347, 60, 6);
-        const left = sim.s.lanterns.filter((x) => !x.lit).length;
-        toast(left ? `Một ngọn đèn đã sáng, còn ${left}` : 'Cả đảo bừng sáng!');
+        const lit = sim.s.lanterns.filter((x) => x.lit).length, need = litNeeded(sim.s.lanterns.length);
+        toast(e.data.relight ? `Đèn ${l.id} sáng lại!` : lit >= need ? `${lit} đèn đang sáng, đủ để chờ bình minh` : `Một ngọn đèn đã sáng, cần ${need - lit} nữa`);
         break;
       }
+      case 'refuel': {
+        stats.motes += e.data.amount; audio.deposit();
+        const l = sim.s.lanterns.find((x) => x.id === e.data.lantern_id);
+        fx.burst([l.pos[0], l.pos[1] + 3.2, l.pos[2]], 0xffd27a, 20, 3);
+        toast(`Châm dầu đèn ${l.id}: ${Math.floor(e.data.fuel)}/${TUNING.fuel_max}`);
+        break;
+      }
+      case 'lantern_out': {
+        const l = sim.s.lanterns.find((x) => x.id === e.data.lantern_id);
+        audio.lose();
+        fx.burst([l.pos[0], l.pos[1] + 3.2, l.pos[2]], 0x5b5f6e, 30, 2);
+        toast(`Đèn ${l.id} đã tắt! Thắp lại chỉ cần ${TUNING.relight_cost} đom đóm`, true);
+        break;
+      }
+      case 'fuel_drain':
+        if (!drainWarned.has(e.data.shade_id)) { drainWarned.add(e.data.shade_id); toast(`Bóng Mực đang hút dầu đèn ${e.data.lantern_id}! Tỏa Sáng để đuổi`, true); }
+        break;
       case 'pulse': stats.stuns += e.data.stunned_ids.length; fx.pulse(P.pos); audio.pulse(); break;
       case 'player_hit': audio.hit(); shake = 1; flash(); if (e.data.by === 'fall') toast('Mây rơi xuống biển mây…', true); break;
       case 'shade_spawned': audio.spawn(); if (mode === 'play') toast('Bóng Mực trồi lên từ sương', true); break;
@@ -327,16 +397,17 @@ function showResult() {
   if (won && night === 3) { showDawn(); return; }
   $('result').querySelector('.panel').classList.toggle('lost', !won);
   $('resEyebrow').textContent = won ? 'Bình minh trên đảo' : 'Đêm vẫn còn dài';
-  $('resTitle').textContent = won ? `${NIGHTS[night].name} đã sáng!` : (s.player.flames <= 0 ? 'Ngọn lửa đã tắt' : 'Trời sáng mà đèn chưa đủ');
-  $('resText').textContent = won ? `Mọi ngọn Đèn Lồng Lớn lại rực sáng giữa biển mây. Đêm ${night + 1} đang chờ.` : 'Lũ Bóng Mực vẫn còn lẩn trong sương. Thử lại Đêm này nhé, Mây.';
+  const litNow = s.lanterns.filter((l) => l.lit).length, need = litNeeded(s.lanterns.length);
+  $('resTitle').textContent = won ? `${NIGHTS[night].name} đón bình minh!` : (s.player.flames <= 0 ? 'Ngọn lửa đã tắt' : `Trời sáng mà chỉ còn ${litNow}/${need} đèn`);
+  $('resText').textContent = won ? `${litNow} ngọn đèn còn sáng khi mặt trời lên. Đêm ${night + 1} đang chờ.` : 'Lũ Bóng Mực vẫn còn lẩn trong sương. Thử lại Đêm này nhé, Mây.';
   $('resScore').textContent = s.score;
-  const base = stats.motes * TUNING.score.per_mote + stats.lit * TUNING.score.per_lantern + stats.stuns * TUNING.score.per_stun;
+  const base = stats.motes * TUNING.score.per_mote + stats.lit * TUNING.score.per_lantern + stats.relit * TUNING.score.per_relight;
   const rows = [
-    ['Đom đóm nạp vào đèn', `${stats.motes} × ${TUNING.score.per_mote}`],
-    ['Đèn được thắp', `${stats.lit} × ${TUNING.score.per_lantern}`],
-    ['Bóng Mực bị xua', `${stats.stuns} × ${TUNING.score.per_stun}`],
+    ['Đom đóm nạp / châm dầu', `${stats.motes} × ${TUNING.score.per_mote}`],
+    ['Đèn thắp lần đầu', `${stats.lit} × ${TUNING.score.per_lantern}`],
+    ['Đèn thắp lại', `${stats.relit} × ${TUNING.score.per_relight}`],
+    [won ? 'Xua Bóng Mực & thưởng bình minh' : 'Xua Bóng Mực', `+${s.score - base}`],
   ];
-  if (won) rows.push(['Thưởng thời gian & Ngọn Lửa', `+${s.score - base}`]);
   rows.push(['Tổng hành trình (các Đêm đã thắng)', `${run.total}`]);
   $('resGrid').innerHTML = rows.map(([a, b]) => `<span>${a}</span><b>${b}</b>`).join('');
   $('btnAgain').textContent = won ? `Sang Đêm ${night + 1}` : 'Chơi lại Đêm';
@@ -401,7 +472,7 @@ function frame() {
 
   player.root.visible = mode !== 'title';
   player.update(dt, t, P, ip);
-  lanternViews.forEach((v, i) => v.update(dt, t, s.lanterns[i]));
+  lanternViews.forEach((v, i) => v.update(dt, t, s.lanterns[i], camera));
   charmViews.forEach((v, i) => v.update(dt, t, s.charms[i] ?? { available: false }));
   const pv = new THREE.Vector3(ip[0], ip[1], ip[2]);
   const alive = new Set();
