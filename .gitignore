@@ -6,3 +6,4 @@ out/
 .data/
 bench.json
 soak.json
+video/
